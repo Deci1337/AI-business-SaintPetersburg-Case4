@@ -32,6 +32,21 @@ FALLBACK = (
     "Рекомендую обратиться к специалисту поддержки или создать заявку в системе."
 )
 
+EXTRACT_PROMPT = "Выдели суть IT-проблемы из сообщения пользователя одним коротким предложением на русском. Только суть, без лишних слов. Сообщение: {query}"
+
+
+def extract_query(user_query: str) -> str:
+    """Очищает запрос от шума через LLM перед поиском."""
+    if len(user_query) < 30:
+        return user_query
+    try:
+        result = _call_llm([
+            {"role": "user", "content": EXTRACT_PROMPT.format(query=user_query)},
+        ])
+        return result if result else user_query
+    except Exception:
+        return user_query
+
 
 def _call_llm(messages: list, retries: int = 3) -> str:
     payload = {
@@ -91,7 +106,8 @@ def classify(user_query: str) -> dict:
 
 def ask(user_query: str) -> tuple[str, bool]:
     """Возвращает (ответ, escalated)."""
-    results = search(user_query, n_results=6)
+    search_query = extract_query(user_query)
+    results = search(search_query, n_results=6)
     if not results or results[0]["score"] < 0.4:
         return FALLBACK, True
 
@@ -107,7 +123,8 @@ def ask(user_query: str) -> tuple[str, bool]:
 
 def ask_full(user_query: str) -> dict:
     """Полный результат: ответ + эскалация + классификация + топ-чанки."""
-    results = search(user_query, n_results=6)
+    search_query = extract_query(user_query)
+    results = search(search_query, n_results=6)
 
     if not results or results[0]["score"] < 0.4:
         return {

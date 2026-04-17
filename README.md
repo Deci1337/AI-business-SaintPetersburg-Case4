@@ -1,86 +1,68 @@
-# Baltiyskiy Bereg — AI Business SPB Hackathon 2026
+# Baltiyskiy Bereg — AI Service Desk Bot
 
-LLM-чатбот для сервис-деска «Балтийский Берег». Постройте ассистента, который помогает сотрудникам создавать, описывать и решать заявки, опираясь на историческую базу тикетов и статьи базы знаний из реальной системы IntraService.
+LLM-чатбот для сервис-деска «ТД Балтийский Берег». Отвечает на вопросы сотрудников, опираясь на 104 000 исторических тикетов и 1 000 KB-статей из реальной системы IntraService.
 
-Данные — дамп MSSQL базы `service_desk_tdbb` (18 таблиц, ~104 000 тикетов, ~1 000 KB-статей). Автоматического скоринга нет — оценивает жюри.
-
-**Платформа:** https://app.ai-business-spb.ru
-
----
-
-## Описание задачи
-
-**О компании:** ООО «ТД «Балтийский Берег» — один из крупнейших производителей рыбной продукции в России. Более 350 наименований, производственные площадки в Петербурге и Ленобласти, поставки по всей стране и на экспорт.
-
-**Проблема:** Отсутствует структурированная база знаний на портале ITSM. Вся информация о решении инцидентов представлена в исторических тикетах.
-
-**Роль ИИ:** Обработать весь массив имеющихся тикетов и статей базы знаний (1 060 документов) из реальной системы IntraService, чтобы отвечать на новые запросы сотрудников.
-
-## Цель и видение результата на хакатон
-
-Разработать LLM-чатбота-помощника (для последующей интеграции с Telegram, Max, Битрикс), который:
-
-* подключается к MSSQL-базе сервис-деска (read-only);
-* анализирует историю тикетов (Task, TaskFieldValues, TaskExpenses) и KB-статьи (KBDocument);
-* отвечает на вопросы сотрудников, помогает создавать/описывать/решать заявки.
-
-## Потенциал бизнес-внедрения
-
-* Аудитория: ~1000 сотрудников компании.
-* Эффект: снижение нагрузки на 1-ю линию техподдержки → сокращение расходов на ФОТ.
-* Интеграция в существующий ITSM: IntraService 4.50.2 (вне скоупа хакатона, но решение должно быть готово к встраиванию).
-
-## Требования к решению
-
-| Категория | Требование |
-|-----------|-----------|
-| Юзкейсы | Пример 1: «Не подключается удаленка» → ответ: «Проверьте UniVPN и 2MFA Контур.Коннект». Пример 2: «Неправильный отчет в 1С» → ответ: «Проверьте период и список контрагентов» |
-| Нагрузка | 30–50 запросов/сутки |
-| Скорость | Ответ ≤ 30 секунд |
-| Качество | ≤50% запросов должны уходить к живому консультанту. Лучше не ответить, чем ошибиться. Доля автоматизации — показатель бизнес-эффекта |
-| Интеграция | Telegram / Max / Битрикс |
-| Развертывание | Пилот — SaaS, продуктив — on-premise на сервере компании |
-| Дашборд | Желателен |
-| Админ-панель | Желательна для управления настройками |
-| 152-ФЗ | Учитывать обработку персональных данных (ПДн из БД удалены, но архитектурно учесть для внедрения) |
-
-## Особенности задачи (важно учесть)
-
-Нет структурированной базы знаний на портале ITSM.
-Вся экспертиза извлекается из исторических тикетов (особенно поле Task.Comment — HTML Q&A-диалоги) и неструктурированных статей KBDocument.
-При переходе в продуктивный режим требуется регулярная обработка БД сервис-деска, чтобы в поиске участвовали как исторические, так и новые данные.
-
-## Критерии оценки решения
-
-| Критерий | Что проверяет жюри |
-|----------|-------------------|
-| Техническая реализация | Бот работает без ошибок, отвечает ≤30 секунд, корректно обрабатывает неструктурированный ввод пользователя. Бот удовлетворяет требованию развертывания на сервере компании. |
-| Бизнес-ценность | Бот решает реальные проблемы сотрудников, снижает потребность в живом консультанте (≤50% эскалаций). |
-| Готовность к внедрению | Код запускается по инструкции, есть README. Команда предлагает прототип на самостоятельный тест. |
-| Презентация и питч | Команда показывает живые диалоги из БД, объясняет логику работы и проверки качества, аргументирует выбор решений. |
-| Инновационность | Нестандартный подход к извлечению знаний из 104 тысяч тикетов при отсутствии готовой базы знаний. |
+**Хакатон:** AI Business SPB 2026, Кейс 4  
+**Репозиторий:** https://github.com/Deci1337/AI-business-SaintPetersburg-Case4
 
 ---
 
-## Оценка
+## Архитектура
 
-Жюри вручную оценивают:
+```
+Сотрудник (Telegram)
+        ↓
+  Telegram Bot  ──────────────────────────────────────────┐
+        ↓                                                  │
+  FastAPI /ask                                             │
+        ↓                                                  │
+  YandexGPT (extract_query) ← очистка запроса             │
+        ↓                                                  │
+  ChromaDB (3 коллекции)                                   │
+    • kb_articles   — 1 680 чанков KB-статей               │
+    • tickets       — 82 000+ чанков Q&A тикетов           │
+    • expenses      — 9 864 чанков решений инженеров       │
+        ↓                                                  │
+  YandexGPT (генерация ответа)                             │
+        ↓                                                  │
+  Ответ пользователю + аналитика на веб-дашборде ──────────┘
+```
 
-1. Качество ответов (точность, польза, естественный язык)
-2. Поиск релевантных KB-статей
-3. Классификацию заявок (предложение Service / TaskType / Priority)
-4. Общий UX
+---
 
 ## Быстрый старт
 
+### 1. Клонировать и настроить окружение
+
 ```bash
+git clone https://github.com/Deci1337/AI-business-SaintPetersburg-Case4
+cd AI-business-SaintPetersburg-Case4
 cp .env.example .env
-# заполните переменные в .env
+# Заполнить .env (см. раздел ниже)
+pip install -r requirements.txt
 ```
 
-## Загрузка данных
+### 2. Переменные окружения (.env)
 
-### Через API
+```env
+YANDEX_GPT_API_KEY=       # API-ключ Yandex Cloud
+YANDEX_GPT_FOLDER_ID=     # folder_id каталога Yandex Cloud
+YANDEX_GPT_MODEL=yandexgpt/latest
+
+MSSQL_SA_PASSWORD=        # пароль SA для Docker-контейнера
+MSSQL_HOST=localhost
+MSSQL_PORT=1433
+MSSQL_DATABASE=service_desk_tdbb
+MSSQL_USER=SA
+
+TELEGRAM_BOT_TOKEN=       # токен от @BotFather
+API_BASE_URL=http://localhost:8001
+API_PUBLIC_URL=http://localhost:8001
+```
+
+### 3. Поднять MSSQL и восстановить БД
+
+Скачать дамп `cleaned.bak` и положить в `data/`:
 
 ```bash
 curl -H "X-API-Key: YOUR_API_KEY" \
@@ -88,98 +70,126 @@ curl -H "X-API-Key: YOUR_API_KEY" \
      -o data/cleaned.bak
 ```
 
-Или через Python:
-
-```python
-import requests
-
-headers = {"X-API-Key": "YOUR_API_KEY"}
-r = requests.get(
-    "https://data.ai-business-spb.ru/data/baltiyskiy-bereg/cleaned.bak",
-    headers=headers,
-    stream=True,
-)
-with open("data/cleaned.bak", "wb") as f:
-    for chunk in r.iter_content(chunk_size=1 << 16):
-        f.write(chunk)
-```
-
-## Настройка базы данных в Docker
-
-1. Положите скачанный `cleaned.bak` в `data/`.
-
-2. Запустите MSSQL:
+Запустить контейнер:
 
 ```bash
-docker compose up -d
+docker compose up -d mssql
+# Подождать ~2 минуты
 ```
 
-3. Дождитесь восстановления базы (~1-2 минуты). Проверьте подключение:
+Восстановить БД:
 
 ```bash
-docker exec -it mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
-    -S localhost -U SA -P "$MSSQL_SA_PASSWORD" \
-    -Q "SELECT TOP 1 Name FROM service_desk_tdbb.dbo.Task"
+docker exec mssql-baltbereg /opt/mssql-tools18/bin/sqlcmd \
+  -S localhost -U SA -P "ВАШ_ПАРОЛЬ" -No \
+  -Q "RESTORE DATABASE [service_desk_tdbb] FROM DISK='/var/opt/mssql/backup/cleaned.bak' \
+  WITH MOVE 'service_desk_tdbb' TO '/var/opt/mssql/data/service_desk_tdbb.mdf', \
+  MOVE 'service_desk_tdbb_log' TO '/var/opt/mssql/data/service_desk_tdbb_log.ldf', REPLACE"
 ```
 
-### Ключевые таблицы
+Проверить:
 
-| Таблица | Назначение |
-|---|---|
-| `Task` | ~104 000 тикетов. `Name`, `Description`, `Comment` (HTML Q&A thread), `StatusId`, `ServiceId`, `TypeId` |
-| `TaskFieldValues` | Значения custom-полей |
-| `TaskExpenses` | Записи работ: `Comments`, `Minutes`, `Date` |
-| `KBDocument` | ~1 000 статей базы знаний: `Name`, `Description` (HTML), `IsPublished`, `Rating` |
-| `KBDocumentTag`, `KBTag`, `KBFolder` | Теги и иерархия папок KB |
-| `Service`, `TaskType`, `Status`, `Priority` | Lookup-таблицы |
-
-Персональные данные удалены из схемы. `Task.Comment` — главный источник Q&A-диалогов для RAG.
-
-## Подключение YandexGPT
-
-YandexGPT совместим с OpenAI API. Настройте переменные в `.env`:
-
-```
-YANDEX_GPT_API_KEY=your-api-key
-YANDEX_GPT_FOLDER_ID=your-folder-id
-YANDEX_GPT_MODEL=yandexgpt/latest
+```bash
+docker exec mssql-baltbereg /opt/mssql-tools18/bin/sqlcmd \
+  -S localhost -U SA -P "ВАШ_ПАРОЛЬ" -No \
+  -Q "SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task"
+# Ожидается ~104 000
 ```
 
-Endpoint: `https://llm.api.cloud.yandex.net/foundationModels/v1/completion`
+### 4. Построить векторный индекс (один раз, ~15-20 мин)
 
-Для OpenAI-совместимого интерфейса используйте:
-
-```
-YANDEX_GPT_BASE_URL=https://llm.api.cloud.yandex.net/foundationModels/v1
+```bash
+python -m src.rag.indexer
 ```
 
-### Получение API-ключа
+Индекс сохраняется в `data/chroma/`. Повторный запуск не нужен — только при обновлении БД.
 
-1. Зайдите в [Yandex Cloud Console](https://console.yandex.cloud/)
-2. Создайте сервисный аккаунт с ролью `ai.languageModels.user`
-3. Создайте API-ключ для этого аккаунта
-4. Скопируйте `folder_id` каталога и API-ключ в `.env`
+### 5. Запустить API-сервер
 
-## Формат сдачи
-
-```
-Формат сдачи:
-– Презентации должны открываться по ссылке
-– Код загружен в публичный Git-репозиторий и открывается по ссылке (коммиты после дедлайна не принимаются)
-– В ReadMe — минимальная документация: структура кода, зависимости, инструкция по деплою
-– По кейсам с лидербордом — загружены и выбраны итоговые решения
+```bash
+uvicorn src.api.app:app --port 8001
 ```
 
-## Активация промокода Яндекс
+Дашборд: http://localhost:8001
+
+### 6. Запустить Telegram-бот (отдельный терминал)
+
+```bash
+python -m src.bot.main
+```
+
+---
+
+## Проверка работы
+
+```bash
+# Тест поиска
+python -c "
+from src.rag.retriever import search
+r = search('не подключается VPN')
+for x in r[:3]:
+    print(f'{x[\"score\"]:.3f} {x[\"meta\"][\"title\"][:50]}')
+"
+
+# Тест полного RAG-цикла
+python -c "
+from src.rag.llm import ask_full
+r = ask_full('Не могу подключиться к VPN из дома, что делать?')
+print(r['answer'])
+print('Эскалация:', r['escalated'])
+"
+```
+
+---
+
+## API эндпоинты
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/ask` | Задать вопрос (RAG + YandexGPT) |
+| GET | `/stats` | Статистика сессии |
+| GET | `/db-stats` | Реальная статистика из MSSQL |
+| GET | `/analyses` | Список запросов сессии |
+| GET | `/analyses/{id}` | Детальный анализ запроса |
+| GET | `/health` | Статус API |
+| GET | `/` | Веб-дашборд |
+| GET | `/analysis/{id}` | Страница анализа запроса |
+
+---
+
+## Структура проекта
 
 ```
-Активация промокода Яндекс:
-Для активации промокода необходимо:
-
-1) Перейти по ссылке https://center.yandex.cloud/
-2) Перейти в раздел Billing
-3) Нажать кнопку Активировать промокод
-4) Активировать промокод
-
-+ будет ссылка на инструкцию по активации биллинг аккаунта.
+src/
+  rag/
+    db.py         — подключение к MSSQL, SQL-запросы
+    indexer.py    — парсинг HTML → чанки → ChromaDB
+    retriever.py  — векторный поиск по 3 коллекциям
+    llm.py        — YandexGPT: очистка запроса + генерация ответа
+  bot/
+    main.py       — Telegram-бот (polling)
+    logger.py     — логирование диалогов в CSV
+  api/
+    app.py        — FastAPI сервер
+  web/
+    index.html    — дашборд аналитики
+    analysis.html — страница анализа запроса
+data/
+  cleaned.bak     — дамп MSSQL (не в git, скачивать отдельно)
+  chroma/         — векторный индекс (генерируется локально)
+  dialogs.csv     — лог диалогов Telegram-бота
 ```
+
+---
+
+## Стек
+
+| Компонент | Технология |
+|-----------|-----------|
+| LLM | YandexGPT (yandexgpt/latest) |
+| Векторная БД | ChromaDB (persistent) |
+| Embeddings | intfloat/multilingual-e5-small |
+| База данных | MSSQL Server 2022 (Docker) |
+| Бот | python-telegram-bot 21.x |
+| API | FastAPI + Uvicorn |
+| Фронтенд | Tailwind CSS + Alpine.js + Chart.js |
