@@ -1,3 +1,4 @@
+import csv
 import logging
 import os
 import time
@@ -212,6 +213,48 @@ def db_stats():
     except Exception as e:
         log.error("db-stats error: %s", e)
         raise HTTPException(500, f"DB error: {e}")
+
+
+class Rating(BaseModel):
+    analysis_id: str
+    score: int
+    question: str = ""
+    answer: str = ""
+
+
+@app.post("/ratings")
+def save_rating(r: Rating):
+    if not 1 <= r.score <= 5:
+        raise HTTPException(400, "score must be 1-5")
+    os.makedirs("data", exist_ok=True)
+    with open("data/ratings.csv", "a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow([
+            datetime.now().isoformat(), r.analysis_id, r.score,
+            r.question[:200], r.answer[:200],
+        ])
+    return {"ok": True}
+
+
+@app.get("/ratings/stats")
+def ratings_stats():
+    path = "data/ratings.csv"
+    if not os.path.exists(path):
+        return {"total": 0, "avg_score": None, "distribution": {}}
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for row in csv.reader(f):
+            if len(row) >= 3:
+                try:
+                    rows.append(int(row[2]))
+                except ValueError:
+                    pass
+    if not rows:
+        return {"total": 0, "avg_score": None, "distribution": {}}
+    return {
+        "total": len(rows),
+        "avg_score": round(sum(rows) / len(rows), 2),
+        "distribution": {str(i): rows.count(i) for i in range(1, 6)},
+    }
 
 
 @app.get("/health")

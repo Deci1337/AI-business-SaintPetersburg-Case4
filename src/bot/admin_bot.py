@@ -1,20 +1,22 @@
 import asyncio
 import csv
+import json
 import logging
 import os
 from datetime import datetime
 
 from dotenv import load_dotenv
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN")
-ADMIN_CHAT_IDS = [int(x) for x in os.getenv("ADMIN_CHAT_ID", "").split(",") if x.strip()]
+SUPER_ADMIN_ID = int(os.getenv("SUPER_ADMIN_ID", "0"))
 MAIN_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 RATINGS_FILE = "data/ratings.csv"
+ADMINS_FILE = "data/admins.json"
 
 # claimed[analysis_id] = admin_user_id
 claimed: dict = {}
@@ -23,6 +25,31 @@ pending: dict = {}
 
 _app = None
 
+
+# --- Admin list management ---
+
+def _load_admins() -> list[int]:
+    if not os.path.exists(ADMINS_FILE):
+        return []
+    with open(ADMINS_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_admins(admins: list[int]) -> None:
+    os.makedirs("data", exist_ok=True)
+    with open(ADMINS_FILE, "w", encoding="utf-8") as f:
+        json.dump(admins, f)
+
+
+def _is_admin(user_id: int) -> bool:
+    return user_id == SUPER_ADMIN_ID or user_id in _load_admins()
+
+
+def _is_super_admin(user_id: int) -> bool:
+    return user_id == SUPER_ADMIN_ID
+
+
+# --- Keyboards ---
 
 def _ratings_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
@@ -39,7 +66,7 @@ def _escalation_keyboard(aid: str) -> InlineKeyboardMarkup:
 
 def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) -> str:
     status = "Эскалация — требует ответа оператора" if escalated else "Автоответ"
-    lines = [
+    return "\n".join([
         f"Запрос #{analysis_id[:8]}",
         "",
         f"Вопрос: {question}",
@@ -49,9 +76,10 @@ def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) 
         f"Статус: {status}",
         "",
         "Оцените ответ модели (1 — плохо, 5 — отлично):",
-    ]
-    return "\n".join(lines)
+    ])
 
+
+# --- Notify ---
 
 async def notify_admins(
     analysis_id: str,
@@ -60,7 +88,8 @@ async def notify_admins(
     escalated: bool,
     user_chat_id: int,
 ) -> None:
-    if not ADMIN_CHAT_IDS or not ADMIN_BOT_TOKEN:
+    admin_ids = [SUPER_ADMIN_ID] + _load_admins() if SUPER_ADMIN_ID else _load_admins()
+    if not admin_ids or not ADMIN_BOT_TOKEN:
         return
 
     pending[analysis_id] = {
@@ -73,14 +102,17 @@ async def notify_admins(
     keyboard = _escalation_keyboard(analysis_id) if escalated else _ratings_keyboard(analysis_id)
 
     bot = Bot(token=ADMIN_BOT_TOKEN)
-    for chat_id in ADMIN_CHAT_IDS:
+    for chat_id in admin_ids:
         try:
             await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
         except Exception as e:
             logging.error(f"notify_admins: chat_id={chat_id} error={e}")
 
 
+# --- Ratings ---
+
 def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> None:
+    os.makedirs("data", exist_ok=True)
     with open(RATINGS_FILE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([
             datetime.now().isoformat(),
@@ -91,10 +123,83 @@ def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> No
         ])
 
 
+# --- Handlers ---
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if not _is_admin(user_id):
+        await update.message.reply_text("Нет доступа.")
+        return
+    role = "супер-админ" if _is_super_admin(user_id) else "админ"
+    await update.message.reply_text(
+        f"Привет! Ты подключён как {role}.\n"
+        + ("/addadmin <id> — добавить админа\n/removeadmin <id> — удалить админа\n/admins — список\n"
+           if _is_super_admin(user_id) else "")
+    )
+
+
+async def cmd_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_super_admin(update.effective_user.id):
+        await update.message.reply_text("Только суперадмин может добавлять других админов.")
+        return
+    if not context.args:
+        await update.message.reply_text("Использование: /addadmin <telegram_user_id>")
+        return
+    try:
+        new_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("ID должен быть числом.")
+        return
+    if new_id == SUPER_ADMIN_ID:
+        await update.message.reply_text("Суперадмин уже является суперадмином.")
+        return
+    admins = _load_admins()
+    if new_id in admins:
+        await update.message.reply_text(f"{new_id} уже является админом.")
+        return
+    admins.append(new_id)
+    _save_admins(admins)
+    await update.message.reply_text(f"Пользователь {new_id} добавлен как админ.")
+
+
+async def cmd_remove_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_super_admin(update.effective_user.id):
+        await update.message.reply_text("Только суперадмин может удалять других админов.")
+        return
+    if not context.args:
+        await update.message.reply_text("Использование: /removeadmin <telegram_user_id>")
+        return
+    try:
+        rem_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("ID должен быть числом.")
+        return
+    admins = _load_admins()
+    if rem_id not in admins:
+        await update.message.reply_text(f"{rem_id} не найден в списке админов.")
+        return
+    admins.remove(rem_id)
+    _save_admins(admins)
+    await update.message.reply_text(f"Пользователь {rem_id} удалён из админов.")
+
+
+async def cmd_list_admins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_super_admin(update.effective_user.id):
+        await update.message.reply_text("Только суперадмин может просматривать список.")
+        return
+    admins = _load_admins()
+    text = f"Супер-админ: {SUPER_ADMIN_ID}\nАдмины: {', '.join(str(a) for a in admins) or 'нет'}"
+    await update.message.reply_text(text)
+
+
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     data = query.data
+
+    if not _is_admin(query.from_user.id):
+        await query.answer("Нет доступа.", show_alert=True)
+        return
 
     if data.startswith("rate_"):
         _, aid, score_str = data.split("_", 2)
@@ -133,8 +238,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     admin_id = update.effective_user.id
-    aid = context.user_data.get("pending_reply")
+    if not _is_admin(admin_id):
+        return
 
+    aid = context.user_data.get("pending_reply")
     if not aid:
         return
 
@@ -167,12 +274,16 @@ def main():
     if not ADMIN_BOT_TOKEN:
         logging.error("ADMIN_BOT_TOKEN не задан в .env")
         return
-    if not ADMIN_CHAT_IDS:
-        logging.error("ADMIN_CHAT_ID не задан в .env")
+    if not SUPER_ADMIN_ID:
+        logging.error("SUPER_ADMIN_ID не задан в .env")
         return
 
     global _app
     _app = ApplicationBuilder().token(ADMIN_BOT_TOKEN).build()
+    _app.add_handler(CommandHandler("start", cmd_start))
+    _app.add_handler(CommandHandler("addadmin", cmd_add_admin))
+    _app.add_handler(CommandHandler("removeadmin", cmd_remove_admin))
+    _app.add_handler(CommandHandler("admins", cmd_list_admins))
     _app.add_handler(CallbackQueryHandler(callback_handler))
     _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     logging.info("Admin bot started")
