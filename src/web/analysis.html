@@ -4,59 +4,78 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Анализ запроса — Балтийский Берег</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 <style>
-  [x-cloak]{display:none!important}
-  .fade-in{animation:fadeIn .3s ease}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-  pre{white-space:pre-wrap;word-break:break-word}
+  :root {
+    --bg-base: #0a0e1a;
+    --bg-surface: #111827;
+    --bg-elevated: #1a2235;
+    --border: #1f2d42;
+    --text-primary: #f0f6ff;
+    --text-secondary: #8899bb;
+    --text-muted: #4a5a7a;
+    --accent: #22d3ee;
+    --accent-dim: rgba(34,211,238,0.12);
+  }
+  * { font-family: 'Inter', sans-serif; }
+  .font-mono, code, pre { font-family: 'JetBrains Mono', monospace; }
+  [x-cloak] { display: none !important; }
+  .fade-in { animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  pre { white-space: pre-wrap; word-break: break-word; }
+  body { background-color: var(--bg-base); color: var(--text-primary); }
 </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-gray-800" x-data="analysisPage()">
+<body class="min-h-screen" x-data="analysisPage()">
 
-<header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center gap-4">
-  <a href="/" class="text-gray-400 hover:text-blue-600 transition-colors flex-shrink-0">
+<header style="background:var(--bg-surface);border-bottom:1px solid var(--border)" class="px-8 py-4 flex items-center gap-4">
+  <a href="/" style="color:var(--text-secondary);transition:color .15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-secondary)'" class="flex-shrink-0">
     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
     </svg>
   </a>
   <div class="flex-1">
-    <div class="text-base font-semibold text-gray-900 leading-tight">Анализ запроса</div>
-    <div class="text-xs text-gray-400 mt-0.5" x-text="data ? formatDate(data.created_at) : '...'"></div>
+    <div style="color:var(--text-primary);font-family:'JetBrains Mono',monospace" class="text-base font-semibold leading-tight">Анализ запроса</div>
+    <div style="color:var(--text-muted)" class="text-xs mt-0.5" x-text="data ? formatDate(data.created_at) : '...'"></div>
   </div>
-  <span class="text-xs text-gray-300 font-mono" x-text="aid"></span>
+  <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace" class="text-xs" x-text="aid"></span>
 </header>
 
 <div class="max-w-5xl mx-auto px-6 py-6" x-show="!data && !error">
-  <div class="text-center py-20 text-gray-400">
-    <div class="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+  <div class="text-center py-20" style="color:var(--text-secondary)">
+    <div class="animate-spin w-8 h-8 border-2 rounded-full mx-auto mb-4" style="border-color:var(--accent);border-top-color:transparent"></div>
     Загружаю анализ...
   </div>
 </div>
 
 <div class="max-w-5xl mx-auto px-6 py-6" x-show="error" x-cloak>
-  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-    <p class="text-red-600 text-sm" x-text="error"></p>
-    <a href="/" class="mt-3 inline-block text-sm text-blue-600 hover:underline">← Вернуться к списку</a>
+  <div style="background:#1a0d0d;border:1px solid #3d1515" class="rounded-lg p-6 text-center">
+    <p style="color:#f87171" class="text-sm" x-text="error"></p>
+    <a href="/" style="color:var(--text-secondary);transition:color .15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-secondary)'" class="mt-3 inline-block text-sm">← Вернуться к списку</a>
   </div>
 </div>
 
 <div class="max-w-5xl mx-auto px-6 py-6 space-y-4 fade-in" x-show="data" x-cloak>
 
   <!-- Вопрос -->
-  <div class="bg-white rounded-lg border border-gray-200 p-6">
+  <div style="background:var(--bg-surface);border:1px solid var(--border)" class="rounded-lg p-6">
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
-        <div class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Вопрос сотрудника</div>
-        <div class="text-lg font-semibold text-gray-900" x-text="data?.question"></div>
+        <div style="color:var(--text-muted);font-size:10px;letter-spacing:.1em;text-transform:uppercase" class="mb-2">Вопрос сотрудника</div>
+        <div style="color:var(--text-primary)" class="text-lg font-semibold" x-text="data?.question"></div>
       </div>
       <div class="flex flex-col items-end gap-2 flex-shrink-0">
         <span class="px-3 py-1 rounded text-xs font-medium"
-          :class="data?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'"
+          :style="data?.escalated
+            ? 'background:rgba(249,115,22,0.15);color:#fb923c;border:1px solid rgba(249,115,22,0.3)'
+            : 'background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3)'"
           x-text="data?.escalated ? 'Эскалация' : 'Решено автоматически'">
         </span>
-        <span class="text-xs text-gray-400"
+        <span style="color:var(--text-muted)" class="text-xs"
           x-text="data?.source === 'telegram' ? 'Telegram' : 'Web'">
         </span>
       </div>
@@ -65,114 +84,122 @@
 
   <!-- Классификация + тайминги -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-      <div class="text-xs text-gray-400 mb-1">Категория</div>
-      <div class="font-medium text-sm text-gray-800" x-text="data?.classification?.service || '—'"></div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border)" class="rounded-lg p-4">
+      <div style="color:var(--text-muted)" class="text-xs mb-1">Категория</div>
+      <div style="color:var(--text-primary);font-family:'JetBrains Mono',monospace" class="font-medium text-sm" x-text="data?.classification?.service || '—'"></div>
     </div>
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-      <div class="text-xs text-gray-400 mb-1">Приоритет</div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border)" class="rounded-lg p-4">
+      <div style="color:var(--text-muted)" class="text-xs mb-1">Приоритет</div>
       <div class="font-medium text-sm"
-        :class="{
-          'text-red-600': data?.classification?.priority === 'Критичный',
-          'text-orange-500': data?.classification?.priority === 'Высокий',
-          'text-yellow-600': data?.classification?.priority === 'Средний',
-          'text-emerald-600': data?.classification?.priority === 'Низкий',
+        :style="{
+          'color': data?.classification?.priority === 'Критичный' ? '#f87171' :
+                   data?.classification?.priority === 'Высокий' ? '#fb923c' :
+                   data?.classification?.priority === 'Средний' ? '#fbbf24' :
+                   data?.classification?.priority === 'Низкий' ? '#34d399' : 'var(--text-secondary)'
         }"
         x-text="data?.classification?.priority || '—'">
       </div>
     </div>
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-      <div class="text-xs text-gray-400 mb-1">Общее время</div>
-      <div class="font-semibold text-sm text-blue-600" x-text="data?.timing?.total_ms + ' мс'"></div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border)" class="rounded-lg p-4">
+      <div style="color:var(--text-muted)" class="text-xs mb-1">Общее время</div>
+      <div style="color:var(--accent);font-family:'JetBrains Mono',monospace" class="font-semibold text-sm" x-text="data?.timing?.total_ms + ' мс'"></div>
     </div>
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-      <div class="text-xs text-gray-400 mb-1">Статус</div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border)" class="rounded-lg p-4">
+      <div style="color:var(--text-muted)" class="text-xs mb-1">Статус</div>
       <div class="font-medium text-sm"
-        :class="data?.escalated ? 'text-orange-500' : 'text-emerald-600'"
+        :style="data?.escalated ? 'color:#fb923c' : 'color:#34d399'"
         x-text="data?.escalated ? 'Нужен оператор' : 'Автоответ'">
       </div>
     </div>
   </div>
 
   <!-- Ответ -->
-  <div class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="text-sm font-medium text-gray-700 mb-3">Ответ модели</div>
-    <div class="bg-slate-50 rounded-md border border-gray-100 p-4 text-sm text-gray-700 leading-relaxed" x-text="data?.answer"></div>
+  <div style="background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid var(--accent)" class="rounded-lg p-6">
+    <div style="color:var(--text-secondary)" class="text-sm font-medium mb-3">Ответ модели</div>
+    <div style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary)" class="rounded-md p-4 text-sm leading-relaxed" x-text="data?.answer"></div>
   </div>
 
   <!-- Распределение времени -->
-  <div class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="text-sm font-medium text-gray-700 mb-4">Распределение времени обработки</div>
-    <div class="flex rounded-md overflow-hidden h-6">
-      <div class="bg-violet-500 transition-all"
+  <div style="background:var(--bg-surface);border:1px solid var(--border)" class="rounded-lg p-6">
+    <div style="color:var(--text-secondary)" class="text-sm font-medium mb-4">Распределение времени обработки</div>
+    <div class="flex rounded-md overflow-hidden h-6" style="background:var(--bg-elevated)">
+      <div class="transition-all" style="background:var(--accent)"
         :style="`width:${Math.round((data?.timing?.search_ms / data?.timing?.total_ms)*100)}%`">
       </div>
       <div class="bg-indigo-500 transition-all"
         :style="`width:${Math.round((data?.timing?.llm_ms / data?.timing?.total_ms)*100)}%`">
       </div>
     </div>
-    <div class="flex gap-6 mt-3 text-xs text-gray-500">
+    <div class="flex gap-6 mt-3 text-xs" style="color:var(--text-secondary)">
       <span class="flex items-center gap-1.5">
-        <span class="w-2.5 h-2.5 rounded-sm bg-violet-500 flex-shrink-0"></span>
-        Поиск ChromaDB — <strong x-text="data?.timing?.search_ms + ' мс'"></strong>
+        <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style="background:var(--accent)"></span>
+        Поиск ChromaDB — <strong style="color:var(--text-primary);font-family:'JetBrains Mono',monospace" x-text="data?.timing?.search_ms + ' мс'"></strong>
       </span>
       <span class="flex items-center gap-1.5">
         <span class="w-2.5 h-2.5 rounded-sm bg-indigo-500 flex-shrink-0"></span>
-        YandexGPT — <strong x-text="data?.timing?.llm_ms + ' мс'"></strong>
+        YandexGPT — <strong style="color:var(--text-primary);font-family:'JetBrains Mono',monospace" x-text="data?.timing?.llm_ms + ' мс'"></strong>
       </span>
-      <span class="text-gray-400">
-        Итого: <strong class="text-gray-600" x-text="data?.timing?.total_ms + ' мс'"></strong>
+      <span style="color:var(--text-muted)">
+        Итого: <strong style="color:var(--accent);font-family:'JetBrains Mono',monospace" x-text="data?.timing?.total_ms + ' мс'"></strong>
       </span>
     </div>
   </div>
 
   <!-- Фрагменты -->
-  <div class="bg-white rounded-lg border border-gray-200 p-6">
+  <div style="background:var(--bg-surface);border:1px solid var(--border)" class="rounded-lg p-6">
     <div class="flex items-center justify-between mb-4">
-      <div class="text-sm font-medium text-gray-700">Найденные фрагменты</div>
-      <div class="flex gap-4 text-xs text-gray-400">
+      <div style="color:var(--text-secondary)" class="text-sm font-medium">Найденные фрагменты</div>
+      <div class="flex gap-4 text-xs" style="color:var(--text-muted)">
         <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400"></span>KB-статья</span>
         <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Решение</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span>Тикет</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:var(--accent)"></span>Тикет</span>
       </div>
     </div>
 
     <div class="space-y-2">
       <template x-for="chunk in data?.chunks" :key="chunk.rank">
-        <div class="border rounded-md overflow-hidden"
-          :class="chunk.rank === 1 ? 'border-blue-200' : 'border-gray-100'">
+        <div class="rounded-md overflow-hidden"
+          :style="chunk.rank === 1
+            ? 'border:1px solid var(--border);border-left:3px solid var(--accent)'
+            : 'border:1px solid var(--border)'">
 
-          <div class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
-            :class="chunk.rank === 1 ? 'bg-blue-50' : 'bg-white'"
+          <div class="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors"
+            :style="chunk.rank === 1
+              ? 'background:var(--bg-elevated)'
+              : 'background:var(--bg-surface)'"
+            @mouseover="$el.style.background='var(--bg-elevated)'"
+            @mouseout="$el.style.background = chunk.rank === 1 ? 'var(--bg-elevated)' : 'var(--bg-surface)'"
             @click="chunk.expanded = !chunk.expanded">
 
-            <span class="text-xs font-bold text-gray-400 w-4 flex-shrink-0" x-text="chunk.rank"></span>
+            <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace" class="text-xs font-bold w-4 flex-shrink-0" x-text="chunk.rank"></span>
 
-            <span class="text-xs px-2 py-0.5 rounded font-medium border flex-shrink-0"
-              :class="chunk.source === 'kb' ? 'border-violet-200 bg-violet-50 text-violet-700' :
-                      chunk.source === 'expense' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                      'border-cyan-200 bg-cyan-50 text-cyan-700'"
+            <span class="text-xs px-2 py-0.5 rounded font-medium flex-shrink-0"
+              :style="chunk.source === 'kb'
+                ? 'border:1px solid rgba(167,139,250,0.3);background:rgba(167,139,250,0.1);color:#a78bfa'
+                : chunk.source === 'expense'
+                ? 'border:1px solid rgba(251,191,36,0.3);background:rgba(251,191,36,0.1);color:#fbbf24'
+                : 'border:1px solid rgba(34,211,238,0.3);background:rgba(34,211,238,0.1);color:var(--accent)'"
               x-text="chunk.source === 'kb' ? 'KB-статья' : chunk.source === 'expense' ? 'Решение' : 'Тикет'">
             </span>
 
-            <span class="text-sm text-gray-700 flex-1 truncate" x-text="chunk.title || '(без заголовка)'"></span>
+            <span style="color:var(--text-primary)" class="text-sm flex-1 truncate" x-text="chunk.title || '(без заголовка)'"></span>
 
-            <span class="text-sm font-semibold font-mono flex-shrink-0"
-              :class="chunk.score > 0.7 ? 'text-emerald-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
+            <span class="text-sm font-semibold flex-shrink-0" style="font-family:'JetBrains Mono',monospace"
+              :style="chunk.score > 0.7 ? 'color:#34d399' : chunk.score > 0.5 ? 'color:#fbbf24' : 'color:#f87171'"
               x-text="(chunk.score * 100).toFixed(1) + '%'">
             </span>
 
-            <svg class="w-4 h-4 text-gray-400 transition-transform flex-shrink-0"
+            <svg class="w-4 h-4 flex-shrink-0 transition-transform" style="color:var(--text-muted)"
               :class="chunk.expanded ? 'rotate-180' : ''"
               fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
             </svg>
           </div>
 
-          <div x-show="chunk.expanded" x-cloak class="border-t border-gray-100 px-4 py-4 bg-white">
-            <pre class="text-xs text-gray-600 leading-relaxed" x-text="chunk.text"></pre>
-            <div x-show="chunk.service" class="mt-2 text-xs text-gray-400">
-              Сервис: <span x-text="chunk.service"></span>
+          <div x-show="chunk.expanded" x-cloak style="border-top:1px solid var(--border);background:var(--bg-elevated)" class="px-4 py-4">
+            <pre style="color:var(--text-secondary);background:var(--bg-base);border:1px solid var(--border);border-radius:.375rem;padding:.75rem;font-family:'JetBrains Mono',monospace" class="text-xs leading-relaxed" x-text="chunk.text"></pre>
+            <div x-show="chunk.service" style="color:var(--text-muted)" class="mt-2 text-xs">
+              Сервис: <span style="color:var(--text-secondary)" x-text="chunk.service"></span>
             </div>
           </div>
         </div>

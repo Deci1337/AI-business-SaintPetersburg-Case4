@@ -4,189 +4,218 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Балтийский Берег — Service Desk AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{}}}</script>
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-  [x-cloak]{display:none!important}
-  .fade-in{animation:fadeIn .35s ease}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-  pre{white-space:pre-wrap;word-break:break-word}
-  .chunk-row:hover{background:#f8fafc}
+:root {
+  --bg-base: #0a0e1a;
+  --bg-surface: #111827;
+  --bg-elevated: #1a2235;
+  --border: #1f2d42;
+  --border-bright: #2d4a6b;
+  --text-primary: #f0f6ff;
+  --text-secondary: #8899bb;
+  --text-muted: #4a5a7a;
+  --accent: #22d3ee;
+  --accent-dim: rgba(34,211,238,0.12);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --orange: #f97316;
+}
+* { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+.font-mono, code, pre { font-family: 'JetBrains Mono', monospace; }
+[x-cloak] { display: none !important; }
+body { background: var(--bg-base); color: var(--text-primary); min-height: 100vh; margin: 0; }
+.fade-in { animation: fadeIn .35s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+pre { white-space: pre-wrap; word-break: break-word; }
+.card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; }
+.card-el { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; }
+.label-xs { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.metric-val { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 700; line-height: 1; }
+.metric-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; gap: 12px; align-items: flex-start; }
+.metric-bar { width: 4px; border-radius: 2px; flex-shrink: 0; align-self: stretch; min-height: 36px; }
+.pill-example { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 9999px; padding: 4px 12px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.pill-example:hover { background: var(--accent-dim); color: var(--accent); border-color: rgba(34,211,238,0.3); }
+.btn-primary { background: linear-gradient(135deg, #06b6d4, #2563eb); color: #fff; border: none; cursor: pointer; border-radius: 8px; font-size: 14px; font-weight: 500; padding: 14px 24px; display: flex; align-items: center; gap: 8px; min-width: 130px; justify-content: center; transition: opacity 0.15s; }
+.btn-primary:hover:not(:disabled) { opacity: 0.88; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+input[type=text] { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; font-size: 15px; width: 100%; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+input[type=text]::placeholder { color: var(--text-muted); }
+input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.08); }
+input[type=text]:disabled { opacity: 0.5; }
+.chunk-row { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+.chunk-row:hover { background: var(--bg-elevated); }
+.chunk-rank1 { border-left: 3px solid var(--accent) !important; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.section-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.35} }
+.pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+tr:hover td { background: var(--bg-elevated); }
+thead th { background: var(--bg-base); }
+table { width: 100%; border-collapse: collapse; }
+td, th { padding: 10px 16px; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-gray-800" x-data="ragInspector()">
+<body x-data="ragInspector()">
 
 <!-- Header -->
-<header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
-  <div>
-    <div class="text-base font-semibold text-gray-900 leading-tight">Балтийский Берег</div>
-    <div class="text-xs text-gray-400 mt-0.5">Service Desk AI — RAG Inspector</div>
+<header style="height:56px;background:var(--bg-surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <img src="/static/logo.png" alt="Балтийский Берег" style="height:34px;width:auto;">
+    <div style="width:1px;height:24px;background:var(--border);"></div>
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.04em;">Service Desk AI · RAG Inspector</div>
   </div>
-  <div class="flex items-center gap-2">
-    <div class="w-2 h-2 rounded-full" :class="apiOk ? 'bg-emerald-400' : 'bg-red-400'"></div>
-    <span class="text-xs text-gray-500" x-text="apiOk ? 'API онлайн' : 'API недоступен'"></span>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div class="pulse-dot" style="width:8px;height:8px;border-radius:50%;" :style="apiOk ? 'background:#10b981' : 'background:#ef4444'"></div>
+    <span style="font-size:12px;color:var(--text-secondary);" x-text="apiOk ? 'API онлайн' : 'API недоступен'"></span>
   </div>
 </header>
 
-<div class="max-w-7xl mx-auto px-6 py-6 space-y-5">
+<!-- Main -->
+<main style="max-width:1200px;margin:0 auto;padding:32px 24px;display:flex;flex-direction:column;gap:24px;">
 
-  <!-- Поисковая строка -->
-  <div class="bg-white rounded-lg border border-gray-200 p-5">
-    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Задайте вопрос сотрудника</div>
-    <div class="flex gap-3">
-      <input
-        x-model="query"
-        @keydown.enter="submit"
-        type="text"
-        placeholder="Например: не подключается VPN, ошибка в 1С при отчёте..."
-        class="flex-1 border border-gray-300 rounded-md px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        :disabled="loading"
-      >
-      <button
-        @click="submit"
-        :disabled="loading || !query.trim()"
-        class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-5 py-2.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-center"
-      >
-        <svg x-show="loading" class="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-        </svg>
+  <!-- 1. Поисковая карточка -->
+  <div class="card" style="padding:24px;">
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;">
+      <div class="label-xs">Проверить AI-ответ</div>
+      <span style="font-size:11px;color:var(--text-muted);">* запрос обрабатывается реальным AI на реальных данных из базы «Балтийский Берег»</span>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <input type="text" x-model="query" @keydown.enter="submit" placeholder="Например: не подключается VPN, ошибка в 1С при отчёте..." :disabled="loading">
+      <button class="btn-primary" @click="submit" :disabled="loading || !query.trim()">
+        <template x-if="loading">
+          <svg style="width:16px;height:16px;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="30 70" stroke-linecap="round"/>
+          </svg>
+        </template>
+        <template x-if="!loading">
+          <svg style="width:16px;height:16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </template>
         <span x-text="loading ? 'Поиск...' : 'Спросить'"></span>
       </button>
     </div>
-    <div class="flex flex-wrap gap-2 mt-3">
-      <span class="text-xs text-gray-400">Примеры:</span>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;">
+      <span style="font-size:11px;color:var(--text-muted);">Примеры:</span>
       <template x-for="q in quickQuestions" :key="q">
-        <button @click="query = q; submit()"
-          class="text-xs bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600 px-3 py-1 rounded transition-colors"
-          x-text="q"></button>
+        <button class="pill-example" @click="query = q; submit()" x-text="q"></button>
       </template>
     </div>
   </div>
 
-  <!-- Результат -->
-  <div x-show="result" x-cloak class="fade-in space-y-4">
+  <!-- 2. Результат -->
+  <div x-show="result" x-cloak class="fade-in" style="display:flex;flex-direction:column;gap:16px;">
 
-    <!-- Метрики запроса -->
-    <div class="grid grid-cols-4 gap-3">
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">Общее время</div>
-        <div class="text-xl font-semibold text-blue-600" x-text="result?.timing?.total_ms + ' мс'"></div>
+    <!-- Метрики 4 в ряд -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      <div class="metric-card">
+        <div class="metric-bar" style="background:var(--accent);"></div>
+        <div>
+          <div class="label-xs" style="margin-bottom:6px;">Общее время</div>
+          <div class="metric-val" style="color:var(--accent);" x-text="(result?.timing?.total_ms ?? '—') + ' мс'"></div>
+        </div>
       </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">Поиск</div>
-        <div class="text-xl font-semibold text-violet-600" x-text="result?.timing?.search_ms + ' мс'"></div>
+      <div class="metric-card">
+        <div class="metric-bar" style="background:#8b5cf6;"></div>
+        <div>
+          <div class="label-xs" style="margin-bottom:6px;">Поиск ChromaDB</div>
+          <div class="metric-val" style="color:#a78bfa;" x-text="result?.timing?.retrieval_ms != null ? result.timing.retrieval_ms + ' мс' : '—'"></div>
+        </div>
       </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">YandexGPT</div>
-        <div class="text-xl font-semibold text-indigo-600" x-text="result?.timing?.llm_ms + ' мс'"></div>
+      <div class="metric-card">
+        <div class="metric-bar" style="background:#6366f1;"></div>
+        <div>
+          <div class="label-xs" style="margin-bottom:6px;">YandexGPT</div>
+          <div class="metric-val" style="color:#818cf8;" x-text="result?.timing?.llm_ms != null ? result.timing.llm_ms + ' мс' : '—'"></div>
+        </div>
       </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">Статус</div>
-        <div class="text-sm font-semibold mt-0.5"
-          :class="result?.escalated ? 'text-orange-500' : 'text-emerald-600'"
-          x-text="result?.escalated ? 'Эскалация' : 'Решено автоматически'">
+      <div class="metric-card">
+        <div class="metric-bar" :style="result?.escalated ? 'background:#f97316' : 'background:#10b981'"></div>
+        <div>
+          <div class="label-xs" style="margin-bottom:6px;">Статус</div>
+          <div class="metric-val" :style="result?.escalated ? 'color:#f97316' : 'color:#10b981'" x-text="result?.escalated ? 'Эскалация' : 'Автоответ'"></div>
         </div>
       </div>
     </div>
 
-    <!-- Классификация -->
-    <div x-show="result?.classification" class="grid grid-cols-2 gap-3">
-      <div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3">
-        <div class="w-1 h-8 bg-violet-400 rounded-full flex-shrink-0"></div>
-        <div>
-          <div class="text-xs text-gray-400">Категория сервиса</div>
-          <div class="font-medium text-gray-800 text-sm mt-0.5" x-text="result?.classification?.service || '—'"></div>
-        </div>
+    <!-- Классификация 2 в ряд -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+      <div class="card" style="padding:16px;">
+        <div class="label-xs" style="margin-bottom:8px;">Категория сервиса</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text-primary);" x-text="result?.classification?.service || '—'"></div>
       </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3">
-        <div class="w-1 h-8 rounded-full flex-shrink-0"
-          :class="{
-            'bg-red-500': result?.classification?.priority === 'Критичный',
-            'bg-orange-400': result?.classification?.priority === 'Высокий',
-            'bg-yellow-400': result?.classification?.priority === 'Средний',
-            'bg-emerald-400': result?.classification?.priority === 'Низкий',
-          }">
-        </div>
-        <div>
-          <div class="text-xs text-gray-400">Приоритет</div>
-          <div class="font-medium text-sm mt-0.5"
-            :class="{
-              'text-red-600': result?.classification?.priority === 'Критичный',
-              'text-orange-500': result?.classification?.priority === 'Высокий',
-              'text-yellow-600': result?.classification?.priority === 'Средний',
-              'text-emerald-600': result?.classification?.priority === 'Низкий',
-            }"
-            x-text="result?.classification?.priority || '—'">
-          </div>
-        </div>
+      <div class="card" style="padding:16px;">
+        <div class="label-xs" style="margin-bottom:8px;">Приоритет</div>
+        <span style="font-size:13px;font-weight:600;padding:4px 12px;border-radius:6px;display:inline-block;"
+          :style="result?.classification?.priority === 'Критичный' ? 'background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)' :
+                  result?.classification?.priority === 'Высокий' ? 'background:rgba(249,115,22,0.15);color:#f97316;border:1px solid rgba(249,115,22,0.3)' :
+                  result?.classification?.priority === 'Средний' ? 'background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.3)' :
+                  'background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3)'"
+          x-text="result?.classification?.priority || '—'"></span>
       </div>
     </div>
 
-    <!-- Ответ + Фрагменты -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Ответ + Фрагменты 2 в ряд -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
 
-      <!-- Ответ -->
-      <div class="bg-white rounded-lg border border-gray-200 p-5">
-        <div class="flex items-center justify-between mb-3">
-          <div class="text-sm font-medium text-gray-700">Ответ модели</div>
-          <span class="text-xs px-2 py-0.5 rounded font-medium"
-            :class="result?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'"
-            x-text="result?.escalated ? 'Нужен оператор' : 'Автоответ'">
-          </span>
+      <!-- Ответ модели -->
+      <div class="card" style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div class="section-title" style="margin:0;">Ответ модели</div>
+          <span style="font-size:11px;font-weight:500;padding:3px 10px;border-radius:9999px;"
+            :style="result?.escalated ? 'background:rgba(249,115,22,0.1);color:#f97316;border:1px solid rgba(249,115,22,0.25)' : 'background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.25)'"
+            x-text="result?.escalated ? 'Нужен оператор' : 'Автоответ'"></span>
         </div>
-        <div class="text-sm text-gray-700 leading-relaxed bg-slate-50 rounded-md p-4 border border-gray-100" x-text="result?.answer"></div>
-        <div x-show="result?.top_source" class="mt-3 flex items-center gap-2 text-xs text-gray-500">
-          <span class="px-2 py-0.5 rounded font-medium border"
-            :class="result?.top_source?.source === 'kb' ? 'border-violet-200 bg-violet-50 text-violet-700' :
-                    result?.top_source?.source === 'expense' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-cyan-200 bg-cyan-50 text-cyan-700'"
-            x-text="result?.top_source?.source === 'kb' ? 'KB' :
-                    result?.top_source?.source === 'expense' ? 'Решение' : 'Тикет'">
-          </span>
-          <span class="truncate" x-text="result?.top_source?.title"></span>
-          <span class="font-mono text-emerald-600 flex-shrink-0" x-text="(result?.top_source?.score * 100).toFixed(0) + '%'"></span>
+        <div style="background:var(--bg-elevated);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.7;" x-text="result?.answer"></div>
+        <div x-show="result?.top_source" style="margin-top:12px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;color:var(--text-muted);">Источник:</span>
+          <span style="font-size:11px;font-weight:500;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,211,238,0.2);border-radius:4px;padding:2px 8px;" x-text="result?.top_source"></span>
         </div>
-        <div x-show="result?.analysis_id" class="mt-3">
-          <a :href="`/analysis/${result?.analysis_id}`" target="_blank"
-            class="text-xs text-blue-600 hover:underline">
-            Открыть полный анализ →
+        <div x-show="result?.id" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+          <a :href="'/analysis/' + result?.id" style="font-size:12px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:4px;">
+            <svg style="width:12px;height:12px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            Открыть детальный анализ
           </a>
         </div>
       </div>
 
-      <!-- Фрагменты -->
-      <div class="bg-white rounded-lg border border-gray-200 p-5">
-        <div class="flex items-center justify-between mb-3">
-          <div class="text-sm font-medium text-gray-700">Найденные фрагменты</div>
-          <div class="flex gap-3 text-xs text-gray-400">
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400 inline-block"></span>KB</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Решение</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>Тикет</span>
+      <!-- Найденные фрагменты -->
+      <div class="card" style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div class="section-title" style="margin:0;">Найденные фрагменты</div>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted);">
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#8b5cf6;display:inline-block;"></span>KB</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;"></span>Решение</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#22d3ee;display:inline-block;"></span>Тикет</span>
           </div>
         </div>
-        <div class="space-y-1.5">
+        <div style="display:flex;flex-direction:column;gap:6px;">
           <template x-for="chunk in result?.chunks" :key="chunk.rank">
-            <div class="chunk-row rounded-md border cursor-pointer transition-colors"
-              :class="chunk.rank === 1 ? 'border-blue-200 bg-blue-50' : 'border-gray-100'"
-              @click="chunk.expanded = !chunk.expanded">
-              <div class="flex items-center gap-2.5 px-3 py-2">
-                <span class="text-xs font-bold text-gray-400 w-4 flex-shrink-0" x-text="chunk.rank"></span>
-                <span class="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0"
-                  :class="chunk.source === 'kb' ? 'bg-violet-100 text-violet-700' :
-                          chunk.source === 'expense' ? 'bg-amber-100 text-amber-700' :
-                          'bg-cyan-100 text-cyan-700'"
-                  x-text="chunk.source === 'kb' ? 'KB' : chunk.source === 'expense' ? 'Решение' : 'Тикет'">
-                </span>
-                <span class="text-xs text-gray-700 truncate flex-1" x-text="chunk.title || '(без заголовка)'"></span>
-                <span class="text-xs font-mono font-semibold flex-shrink-0"
-                  :class="chunk.score > 0.7 ? 'text-emerald-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
-                  x-text="(chunk.score * 100).toFixed(0) + '%'">
-                </span>
+            <div class="chunk-row" :class="chunk.rank === 1 ? 'chunk-rank1' : ''" @click="chunk.expanded = !chunk.expanded">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);width:16px;flex-shrink:0;" x-text="chunk.rank"></span>
+                <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;flex-shrink:0;"
+                  :style="chunk.source === 'kb' ? 'background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.2)' :
+                          chunk.source === 'expense' ? 'background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.2)' :
+                          'background:rgba(34,211,238,0.1);color:#22d3ee;border:1px solid rgba(34,211,238,0.2)'"
+                  x-text="chunk.source === 'kb' ? 'KB-статья' : chunk.source === 'expense' ? 'Решение' : 'Тикет'"></span>
+                <span style="font-size:12px;color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="chunk.title || '(без заголовка)'"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;flex-shrink:0;"
+                  :style="chunk.score > 0.7 ? 'color:#10b981' : chunk.score > 0.5 ? 'color:#eab308' : 'color:#ef4444'"
+                  x-text="(chunk.score * 100).toFixed(1) + '%'"></span>
+                <svg style="width:14px;height:14px;flex-shrink:0;color:var(--text-muted);transition:transform 0.2s;" :style="chunk.expanded ? 'transform:rotate(180deg)' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
               </div>
-              <div x-show="chunk.expanded" x-cloak class="border-t border-gray-100 px-3 py-3">
-                <pre class="text-xs text-gray-600 leading-relaxed" x-text="chunk.text"></pre>
+              <div x-show="chunk.expanded" x-cloak style="border-top:1px solid var(--border);padding:12px 14px;background:var(--bg-base);">
+                <pre style="font-size:11px;color:var(--text-secondary);line-height:1.6;" x-text="chunk.text"></pre>
               </div>
             </div>
           </template>
@@ -195,200 +224,214 @@
     </div>
   </div>
 
-  <!-- Статистика реальной БД -->
-  <div x-show="dbStats" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="text-sm font-medium text-gray-700 mb-1">Статистика базы — последние 12 месяцев</div>
-    <div class="text-xs text-gray-400 mb-5">Данные из MSSQL сервис-деска «Балтийский Берег»</div>
+  <!-- 3. Статистика сессии -->
+  <div x-show="stats && stats.total > 0" x-cloak class="card" style="padding:24px;">
+    <div class="label-xs" style="margin-bottom:4px;">Статистика сессии</div>
+    <div class="section-sub">Запросы с момента запуска · сбрасывается при перезапуске сервера</div>
 
-    <div class="grid grid-cols-4 gap-4 mb-6">
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-gray-900" x-text="dbStats?.total_tasks?.toLocaleString('ru-RU')"></div>
-        <div class="text-xs text-gray-400 mt-1">Всего заявок</div>
+    <!-- KPI 6 карточек -->
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:24px;">
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Всего запросов</div>
+        <div class="metric-val" style="color:var(--text-primary);font-size:1.6rem;" x-text="stats?.total ?? 0"></div>
       </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-emerald-600" x-text="dbStats?.closed_tasks?.toLocaleString('ru-RU')"></div>
-        <div class="text-xs text-gray-400 mt-1">Закрыто</div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Решено авто</div>
+        <div class="metric-val" style="color:var(--success);font-size:1.6rem;" x-text="stats?.resolved ?? 0"></div>
       </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-red-500" x-text="dbStats?.overdue_tasks?.toLocaleString('ru-RU')"></div>
-        <div class="text-xs text-gray-400 mt-1">Просрочено</div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Эскалировано</div>
+        <div class="metric-val" style="color:var(--orange);font-size:1.6rem;" x-text="stats?.escalated ?? 0"></div>
       </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-blue-600" x-text="dbStats?.avg_resolution_hours ? dbStats.avg_resolution_hours + ' ч' : '—'"></div>
-        <div class="text-xs text-gray-400 mt-1">Среднее время решения</div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Automation %</div>
+        <div class="metric-val" style="color:var(--accent);font-size:1.6rem;" x-text="stats?.total > 0 ? ((stats.resolved / stats.total) * 100).toFixed(0) + '%' : '—'"></div>
+      </div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Среднее время</div>
+        <div class="metric-val" style="color:#a78bfa;font-size:1.6rem;" x-text="stats?.avg_ms != null ? stats.avg_ms + ' мс' : '—'"></div>
+      </div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">TG / Web</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-top:2px;">
+          <span class="metric-val" style="color:#22d3ee;font-size:1.6rem;" x-text="stats?.sources?.telegram ?? 0"></span>
+          <span style="color:var(--text-muted);font-size:14px;">/</span>
+          <span class="metric-val" style="color:#6366f1;font-size:1.6rem;" x-text="stats?.sources?.api ?? 0"></span>
+        </div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Графики 3 в ряд -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;border-top:1px solid var(--border);padding-top:20px;">
       <div>
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Топ сервисов по заявкам</div>
+        <div class="label-xs" style="margin-bottom:12px;">По категориям</div>
+        <canvas id="serviceChart"></canvas>
+      </div>
+      <div>
+        <div class="label-xs" style="margin-bottom:12px;">По приоритетам</div>
+        <canvas id="priorityChart"></canvas>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="label-xs" style="margin-bottom:12px;align-self:flex-start;">Каналы</div>
+        <canvas id="sourcesChart" style="max-height:180px;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Данные из MSSQL -->
+  <div x-show="dbStats" x-cloak class="card" style="padding:24px;">
+    <div class="label-xs" style="margin-bottom:4px;">База знаний «Балтийский Берег»</div>
+    <div class="section-sub">Данные MSSQL · последние 12 месяцев</div>
+
+    <!-- KPI 4 карточки -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px;">
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Всего заявок</div>
+        <div class="metric-val" style="color:var(--text-primary);font-size:1.6rem;" x-text="dbStats?.total_tickets ?? '—'"></div>
+      </div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Закрыто</div>
+        <div class="metric-val" style="color:var(--success);font-size:1.6rem;" x-text="dbStats?.closed_tickets ?? '—'"></div>
+      </div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Просрочено</div>
+        <div class="metric-val" style="color:var(--danger);font-size:1.6rem;" x-text="dbStats?.overdue_tickets ?? '—'"></div>
+      </div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Среднее время решения</div>
+        <div class="metric-val" style="color:var(--accent);font-size:1.6rem;" x-text="dbStats?.avg_resolution_time ?? '—'"></div>
+      </div>
+    </div>
+
+    <!-- Графики 2 в ряд -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid var(--border);padding-top:20px;">
+      <div>
+        <div class="label-xs" style="margin-bottom:12px;">Топ сервисов по заявкам</div>
         <canvas id="dbServicesChart"></canvas>
       </div>
       <div>
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Динамика по месяцам</div>
+        <div class="label-xs" style="margin-bottom:12px;">Динамика по месяцам</div>
         <canvas id="dbMonthlyChart"></canvas>
       </div>
     </div>
   </div>
 
-  <!-- Статистика сессии -->
-  <div x-show="stats && stats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="text-sm font-medium text-gray-700 mb-1">Статистика сессии</div>
-    <div class="text-xs text-gray-400 mb-5">Запросы с момента запуска сервера</div>
+  <!-- 5. Качество AI -->
+  <div x-show="ratingsStats && ratingsStats.total > 0" x-cloak class="card" style="padding:24px;">
+    <div class="label-xs" style="margin-bottom:4px;">Качество AI · Оценки операторов</div>
+    <div class="section-sub">Операторы оценивают точность ответов через Telegram admin-бот</div>
 
-    <div class="grid grid-cols-4 gap-4 mb-6">
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-gray-900" x-text="stats?.total"></div>
-        <div class="text-xs text-gray-400 mt-1">Запросов</div>
+    <!-- KPI 3 карточки -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px;">
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Всего оценок</div>
+        <div class="metric-val" style="color:var(--text-primary);font-size:1.6rem;" x-text="ratingsStats?.total ?? 0"></div>
       </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-emerald-600" x-text="stats?.automation_rate + '%'"></div>
-        <div class="text-xs text-gray-400 mt-1">Автоматизация</div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Средняя оценка</div>
+        <div class="metric-val" style="color:var(--success);font-size:1.6rem;" x-text="ratingsStats?.avg != null ? Number(ratingsStats.avg).toFixed(1) : '—'"></div>
       </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-orange-500" x-text="stats?.escalation_rate + '%'"></div>
-        <div class="text-xs text-gray-400 mt-1">Эскалаций</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-blue-600" x-text="stats?.avg_ms + ' мс'"></div>
-        <div class="text-xs text-gray-400 mt-1">Среднее время</div>
+      <div class="metric-card" style="flex-direction:column;gap:6px;">
+        <div class="label-xs">Дельта весов</div>
+        <div class="metric-val" :style="modelWeightDelta() >= 0 ? 'color:var(--success);font-size:1.6rem;' : 'color:var(--danger);font-size:1.6rem;'" x-text="(modelWeightDelta() >= 0 ? '+' : '') + modelWeightDelta().toFixed(0) + '%'"></div>
       </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-6">
-      <div>
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По категориям</div>
-        <canvas id="serviceChart"></canvas>
-      </div>
-      <div>
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По приоритетам</div>
-        <canvas id="priorityChart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Оценки модели -->
-  <div x-show="ratingsStats && ratingsStats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="text-sm font-medium text-gray-700 mb-1">Оценки операторов</div>
-    <div class="text-xs text-gray-400 mb-5">Средняя оценка качества ответов модели</div>
-    <div class="grid grid-cols-3 gap-4 mb-5">
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-gray-900" x-text="ratingsStats?.total"></div>
-        <div class="text-xs text-gray-400 mt-1">Оценок получено</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-blue-600" x-text="ratingsStats?.avg_score ? ratingsStats.avg_score + ' / 5' : '—'"></div>
-        <div class="text-xs text-gray-400 mt-1">Средняя оценка</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-emerald-600"
-          x-text="ratingsStats?.distribution?.['5'] || 0">
-        </div>
-        <div class="text-xs text-gray-400 mt-1">Оценок «5»</div>
-      </div>
-    </div>
-    <div>
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Распределение оценок</div>
-      <canvas id="ratingsChart" height="80"></canvas>
+    <!-- Распределение оценок -->
+    <div style="margin-bottom:20px;">
+      <div class="label-xs" style="margin-bottom:12px;">Распределение оценок</div>
+      <canvas id="ratingsChart" style="height:80px;max-height:80px;"></canvas>
     </div>
 
     <!-- Веса модели -->
-    <div class="mt-6 border-t border-gray-100 pt-5">
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Изменение весов модели</div>
-      <div class="text-xs text-gray-400 mb-4">Накопленный эффект оценок операторов на приоритеты источников RAG</div>
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <div class="rounded-lg p-4 border flex items-center gap-3"
-          :class="modelWeightDelta() > 0 ? 'border-emerald-200 bg-emerald-50' : modelWeightDelta() < 0 ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'">
-          <div class="text-3xl font-bold"
-            :class="modelWeightDelta() > 0 ? 'text-emerald-600' : modelWeightDelta() < 0 ? 'text-red-500' : 'text-gray-400'"
-            x-text="(modelWeightDelta() > 0 ? '+' : '') + modelWeightDelta().toFixed(1) + '%'">
+    <div style="border-top:1px solid var(--border);padding-top:20px;">
+      <div class="label-xs" style="margin-bottom:12px;">Веса модели по оценкам</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        <template x-for="score in [1,2,3,4,5]" :key="score">
+          <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:72px;">
+            <div style="font-size:16px;margin-bottom:4px;" x-text="['★','★★','★★★','★★★★','★★★★★'][score-1]"></div>
+            <div class="label-xs" style="margin-bottom:4px;" x-text="'Оценка ' + score"></div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;"
+              :style="weightFor(score) > 0 ? 'color:var(--success)' : weightFor(score) < 0 ? 'color:var(--danger)' : 'color:var(--text-muted)'"
+              x-text="weightLabel(score)"></div>
           </div>
-          <div>
-            <div class="text-xs font-medium text-gray-700">Суммарное изменение весов</div>
-            <div class="text-xs text-gray-400 mt-0.5"
-              x-text="modelWeightDelta() > 0 ? 'Модель дообучилась в лучшую сторону' : modelWeightDelta() < 0 ? 'Требуется доработка источников' : 'Нейтральные оценки'">
-            </div>
-          </div>
-        </div>
-        <div class="rounded-lg p-4 border border-gray-100 bg-gray-50">
-          <div class="text-xs font-medium text-gray-600 mb-2">Расшифровка по оценкам</div>
-          <div class="space-y-1 text-xs text-gray-500">
-            <template x-for="s in [5,4,3,2,1]" :key="s">
-              <div class="flex justify-between">
-                <span>
-                  <span x-text="'⭐'.repeat(s) + ' (×'"></span><span x-text="ratingsStats?.distribution?.[s] || ratingsStats?.distribution?.[String(s)] || 0"></span><span>)</span>
-                </span>
-                <span class="font-mono"
-                  :class="weightFor(s) > 0 ? 'text-emerald-600' : weightFor(s) < 0 ? 'text-red-500' : 'text-gray-400'"
-                  x-text="weightLabel(s) + ' за оценку'">
-                </span>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-      <div class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700"
-        x-text="modelWeightTrendLabel()">
-      </div>
-    </div>
-  </div>
-
-  <!-- Список запросов -->
-  <div x-show="allAnalyses.length > 0" x-cloak class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-      <div class="text-sm font-medium text-gray-700">Запросы сессии</div>
-      <span class="text-xs text-gray-400" x-text="allAnalyses.length + ' запросов'"></span>
-    </div>
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wide">
-          <th class="text-left px-6 py-3 font-medium">Вопрос</th>
-          <th class="text-left px-4 py-3 font-medium">Статус</th>
-          <th class="text-left px-4 py-3 font-medium">Время</th>
-          <th class="text-left px-4 py-3 font-medium">Канал</th>
-          <th class="px-4 py-3"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <template x-for="a in allAnalyses" :key="a.id">
-          <tr class="border-b border-gray-50 hover:bg-slate-50 transition-colors">
-            <td class="px-6 py-3 text-gray-700 max-w-xs truncate" x-text="a.question"></td>
-            <td class="px-4 py-3">
-              <span class="text-xs px-2 py-0.5 rounded font-medium"
-                :class="a.escalated ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'"
-                x-text="a.escalated ? 'Эскалация' : 'Решено'">
-              </span>
-            </td>
-            <td class="px-4 py-3 text-xs text-gray-500 font-mono" x-text="a.total_ms + ' мс'"></td>
-            <td class="px-4 py-3 text-xs text-gray-500" x-text="a.source === 'telegram' ? 'Telegram' : 'Web'"></td>
-            <td class="px-4 py-3">
-              <a :href="`/analysis/${a.id}`" target="_blank"
-                class="text-xs text-blue-600 hover:underline">Анализ</a>
-            </td>
-          </tr>
         </template>
-      </tbody>
-    </table>
+      </div>
+      <div style="background:var(--bg-elevated);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:12px 16px;font-size:12px;color:var(--text-secondary);line-height:1.6;" x-text="modelWeightTrendLabel()"></div>
+    </div>
   </div>
 
-  <!-- Пустое состояние -->
-  <div x-show="!result && !loading" class="text-center py-16 text-gray-400">
-    <div class="w-12 h-12 border-2 border-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
-      <svg class="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+  <!-- 6. Таблица запросов -->
+  <div x-show="allAnalyses.length > 0" x-cloak class="card" style="overflow:hidden;">
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border);">
+      <div class="label-xs" style="margin-bottom:2px;">История запросов</div>
+      <div style="font-size:12px;color:var(--text-muted);">Все обработанные обращения в рамках сессии</div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr style="text-align:left;border-bottom:1px solid var(--border);">
+            <th style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Вопрос</th>
+            <th style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Категория</th>
+            <th style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Приоритет</th>
+            <th style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Статус</th>
+            <th style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Время</th>
+            <th style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Канал</th>
+            <th style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Анализ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="a in allAnalyses" :key="a.id">
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="font-size:12px;color:var(--text-secondary);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="a.question"></td>
+              <td style="font-size:12px;color:var(--text-secondary);" x-text="a.classification?.service || '—'"></td>
+              <td>
+                <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;"
+                  :style="a.classification?.priority === 'Критичный' ? 'background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.25)' :
+                          a.classification?.priority === 'Высокий' ? 'background:rgba(249,115,22,0.15);color:#f97316;border:1px solid rgba(249,115,22,0.25)' :
+                          a.classification?.priority === 'Средний' ? 'background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.25)' :
+                          a.classification?.priority === 'Низкий' ? 'background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25)' :
+                          'background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border)'"
+                  x-text="a.classification?.priority || '—'"></span>
+              </td>
+              <td>
+                <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;"
+                  :style="a.escalated ? 'background:rgba(249,115,22,0.1);color:#f97316;border:1px solid rgba(249,115,22,0.25)' : 'background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.25)'"
+                  x-text="a.escalated ? 'Эскалация' : 'Решено'"></span>
+              </td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);" x-text="a.timing?.total_ms != null ? a.timing.total_ms + ' мс' : '—'"></td>
+              <td style="font-size:12px;color:var(--text-secondary);" x-text="a.source === 'telegram' ? 'Telegram' : 'Web'"></td>
+              <td>
+                <a :href="'/analysis/' + a.id" style="font-size:12px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:4px;">
+                  <svg style="width:12px;height:12px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  Открыть
+                </a>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 7. Пустое состояние -->
+  <div x-show="!result && !loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;gap:16px;text-align:center;">
+    <div style="width:64px;height:64px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:16px;display:flex;align-items:center;justify-content:center;">
+      <svg style="width:28px;height:28px;color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
       </svg>
     </div>
-    <p class="text-sm">Задайте вопрос — увидите как работает RAG изнутри</p>
-    <p class="text-xs mt-1 text-gray-300">Поиск по 85 000+ тикетам, 1 680 KB-статьям и 9 864 решениям</p>
+    <div style="font-size:16px;font-weight:600;color:var(--text-primary);">Задайте вопрос</div>
+    <div style="font-size:13px;color:var(--text-muted);max-width:360px;line-height:1.6;">Увидите как работает RAG изнутри — от поиска фрагментов в ChromaDB до финального ответа YandexGPT</div>
   </div>
 
-</div>
+</main>
 
 <script>
-const CHART_DEFAULTS = {
-  responsive: true,
-  plugins: { legend: { display: false } },
-};
+Chart.defaults.color = '#8899bb';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+
+const CHART_DEFAULTS = { responsive: true, plugins: { legend: { display: false } } };
 
 function ragInspector() {
   return {
@@ -429,6 +472,10 @@ function ragInspector() {
             this.renderBarChart('serviceChart', s.by_service,
               ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#64748b']);
             this.renderPriorityChart('priorityChart', s.by_priority);
+            this.renderDoughnutChart('sourcesChart', {
+              'Telegram': s.sources?.telegram || 0,
+              'Web/API': s.sources?.api || 0,
+            }, ['#22d3ee','#6366f1']);
           });
         }
       } catch {}
@@ -468,10 +515,10 @@ function ragInspector() {
         type: 'bar',
         data: {
           labels: sorted.map(([k]) => k),
-          datasets: [{ data: sorted.map(([,v]) => v), backgroundColor: 'rgba(99,102,241,0.75)', borderRadius: 3 }]
+          datasets: [{ data: sorted.map(([,v]) => v), backgroundColor: 'rgba(34,211,238,0.6)', borderRadius: 3 }]
         },
         options: { ...CHART_DEFAULTS, indexAxis: 'y',
-          scales: { x: { beginAtZero: true, grid: { color: '#f1f5f9' } }, y: { ticks: { font: { size: 11 } }, grid: { display: false } } }
+          scales: { x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899bb' } }, y: { ticks: { font: { size: 11 }, color: '#8899bb' }, grid: { display: false } } }
         }
       });
     },
@@ -484,10 +531,10 @@ function ragInspector() {
         type: 'line',
         data: {
           labels: Object.keys(data),
-          datasets: [{ data: Object.values(data), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)', tension: 0.3, fill: true, pointRadius: 3, pointBackgroundColor: '#6366f1' }]
+          datasets: [{ data: Object.values(data), borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.08)', tension: 0.3, fill: true, pointRadius: 3, pointBackgroundColor: '#22d3ee' }]
         },
         options: { ...CHART_DEFAULTS,
-          scales: { y: { beginAtZero: true, title: { display: true, text: 'Заявок', font: { size: 10 }, color: '#94a3b8' }, grid: { color: '#f1f5f9' } }, x: { ticks: { font: { size: 10 } }, grid: { display: false } } }
+          scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899bb' } }, x: { ticks: { font: { size: 10 }, color: '#8899bb' }, grid: { display: false } } }
         }
       });
     },
@@ -499,8 +546,8 @@ function ragInspector() {
       const labels = Object.keys(data);
       this.charts[id] = new Chart(ctx, {
         type: 'bar',
-        data: { labels, datasets: [{ data: Object.values(data), backgroundColor: colors || '#6366f1', borderRadius: 3 }] },
-        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
+        data: { labels, datasets: [{ data: Object.values(data), backgroundColor: colors || '#22d3ee', borderRadius: 3 }] },
+        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#8899bb' }, grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { display: false }, ticks: { color: '#8899bb' } } } }
       });
     },
 
@@ -513,7 +560,21 @@ function ragInspector() {
       this.charts[id] = new Chart(ctx, {
         type: 'bar',
         data: { labels, datasets: [{ data: Object.values(data), backgroundColor: labels.map(l => colorMap[l] || '#64748b'), borderRadius: 3 }] },
-        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
+        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#8899bb' }, grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { display: false }, ticks: { color: '#8899bb' } } } }
+      });
+    },
+
+    renderDoughnutChart(id, data, colors) {
+      const ctx = document.getElementById(id);
+      if (!ctx || !data) return;
+      if (this.charts[id]) this.charts[id].destroy();
+      this.charts[id] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(data),
+          datasets: [{ data: Object.values(data), backgroundColor: colors || ['#22d3ee','#6366f1'], borderWidth: 0 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: true, position: 'bottom', labels: { color: '#8899bb', font: { size: 11 }, padding: 12 } } }, cutout: '65%' }
       });
     },
 
@@ -526,7 +587,7 @@ function ragInspector() {
       this.charts[id] = new Chart(ctx, {
         type: 'bar',
         data: { labels, datasets: [{ data: labels.map(l => dist[l] || 0), backgroundColor: colors, borderRadius: 3 }] },
-        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
+        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#8899bb' }, grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { display: false }, ticks: { color: '#8899bb' } } } }
       });
     },
 
@@ -548,12 +609,11 @@ function ragInspector() {
 
     modelWeightTrendLabel() {
       const delta = this.modelWeightDelta();
-      const avg = this.ratingsStats?.avg_score || 0;
-      if (delta > 10) return `📈 Модель уверенно дообучилась: суммарный прирост +${delta.toFixed(0)}%. Источники с высокими оценками получили повышенный приоритет при поиске.`;
-      if (delta > 0) return `📈 Положительная динамика (+${delta.toFixed(0)}%). Модель корректирует веса источников в пользу релевантных ответов.`;
-      if (delta === 0) return `➡️ Нейтральный баланс. Оценки не изменили приоритеты источников — модель работает в штатном режиме.`;
-      if (delta > -10) return `📉 Небольшое снижение (${delta.toFixed(0)}%). Часть источников помечена как ненадёжные, приоритет снижен.`;
-      return `📉 Значительное снижение (${delta.toFixed(0)}%). Источники по проблемным темам требуют пересмотра и дополнения базы знаний.`;
+      if (delta > 10) return `Модель уверенно дообучилась: суммарный прирост +${delta.toFixed(0)}%. Источники с высокими оценками получили повышенный приоритет при поиске.`;
+      if (delta > 0) return `Положительная динамика (+${delta.toFixed(0)}%). Модель корректирует веса источников в пользу релевантных ответов.`;
+      if (delta === 0) return `Нейтральный баланс. Оценки не изменили приоритеты источников — модель работает в штатном режиме.`;
+      if (delta > -10) return `Небольшое снижение (${delta.toFixed(0)}%). Часть источников помечена как ненадёжные, приоритет снижен.`;
+      return `Значительное снижение (${delta.toFixed(0)}%). Источники по проблемным темам требуют пересмотра и дополнения базы знаний.`;
     },
 
     async submit() {
