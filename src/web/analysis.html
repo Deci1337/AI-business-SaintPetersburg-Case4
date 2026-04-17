@@ -116,12 +116,14 @@
     </div>
     <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:14px;"
       :style="data?.escalated ? 'border-left:3px solid var(--orange)' : 'border-left:3px solid var(--success)'">
-      <div class="label-xs" style="margin-bottom:6px;">Категория / Приоритет</div>
-      <div style="font-size:13px;font-weight:600;"
+      <div class="label-xs" style="margin-bottom:6px;">Категория</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="data?.classification?.service || '—'"></div>
+      <div class="label-xs" style="margin-bottom:4px;">Приоритет</div>
+      <div style="font-size:12px;font-weight:600;"
         :style="data?.classification?.priority === 'Критичный' ? 'color:#f87171' :
                 data?.classification?.priority === 'Высокий' ? 'color:#fb923c' :
                 data?.classification?.priority === 'Средний' ? 'color:#fbbf24' : 'color:#34d399'"
-        x-text="(data?.classification?.service || '—') + ' · ' + (data?.classification?.priority || '—')">
+        x-text="data?.classification?.priority || '—'">
       </div>
     </div>
   </div>
@@ -377,7 +379,7 @@ function analysisPage() {
         const r = await fetch(`/analyses/${this.aid}`);
         if (!r.ok) throw new Error('Анализ не найден');
         const d = await r.json();
-        d.chunks = (d.chunks || []).map(c => ({ ...c, expanded: c.rank === 1 }));
+        d.chunks = (d.chunks || []).map(c => ({ ...c, expanded: false }));
         this.data = d;
       } catch(e) {
         this.error = e.message;
