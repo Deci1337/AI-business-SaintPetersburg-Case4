@@ -31,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     log.error("Unhandled %s on %s: %s\n%s", type(exc).__name__, request.url.path, exc, traceback.format_exc())
