@@ -170,7 +170,7 @@ def db_stats():
                 GROUP BY t.ServiceId
                 ORDER BY cnt DESC
             """)
-            top_services = [{"service": row[0] or "—", "count": row[1]} for row in cursor.fetchall()]
+            top_services = {(row[0] or "—"): row[1] for row in cursor.fetchall()}
 
             cursor.execute("""
                 SELECT
@@ -183,14 +183,12 @@ def db_stats():
                 WHERE Created >= DATEADD(YEAR, -1, GETDATE())
             """)
             row = cursor.fetchone()
-            overdue_stats = {
-                "reaction_overdue": row[0] or 0,
-                "resolution_overdue": row[1] or 0,
-                "total": row[2] or 0,
-                "closed": row[3] or 0,
-                "avg_resolution_min": round(row[4], 1) if row[4] else None,
-            }
+            total = row[2] or 0
+            closed = row[3] or 0
+            overdue = row[1] or 0
+            avg_min = row[4]
 
+            months_ru = ['', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
             cursor.execute("""
                 SELECT
                     YEAR(Created) AS yr,
@@ -201,12 +199,15 @@ def db_stats():
                 GROUP BY YEAR(Created), MONTH(Created)
                 ORDER BY yr, mo
             """)
-            monthly = [{"year": r[0], "month": r[1], "count": r[2]} for r in cursor.fetchall()]
+            monthly = {f"{months_ru[r[1]]} {r[0]}": r[2] for r in cursor.fetchall()}
 
         return {
             "top_services": top_services,
-            "overdue": overdue_stats,
             "monthly": monthly,
+            "total_tasks": total,
+            "closed_tasks": closed,
+            "overdue_tasks": overdue,
+            "avg_resolution_hours": round(avg_min / 60, 1) if avg_min else None,
         }
     except Exception as e:
         log.error("db-stats error: %s", e)

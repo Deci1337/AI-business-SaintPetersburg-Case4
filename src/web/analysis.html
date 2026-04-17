@@ -6,7 +6,6 @@
 <title>Анализ запроса — БалтБерег</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   [x-cloak]{display:none!important}
   .fade-in{animation:fadeIn .35s ease}
@@ -61,7 +60,7 @@
           :class="data?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
           x-text="data?.escalated ? '⚠️ Эскалация' : '✅ Решено'">
         </span>
-        <span class="text-xs text-gray-400"
+        <span class="text-xs"
           :class="data?.source === 'telegram' ? 'text-blue-500' : 'text-gray-400'"
           x-text="data?.source === 'telegram' ? '📱 Telegram' : '🌐 Web'">
         </span>
@@ -95,44 +94,44 @@
     </div>
   </div>
 
-  <!-- Метрики -->
+  <!-- Тайминги -->
   <div class="grid grid-cols-3 gap-3">
     <div class="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
       <div class="text-3xl font-bold text-blue-600" x-text="data?.timing?.total_ms + ' мс'"></div>
       <div class="text-xs text-gray-500 mt-1">Общее время</div>
-      <div class="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div class="h-full bg-blue-500 rounded-full" :style="`width:100%`"></div>
-      </div>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
       <div class="text-3xl font-bold text-purple-600" x-text="data?.timing?.search_ms + ' мс'"></div>
       <div class="text-xs text-gray-500 mt-1">Поиск (ChromaDB)</div>
-      <div class="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div class="h-full bg-purple-400 rounded-full"
-          :style="`width:${Math.round((data?.timing?.search_ms / data?.timing?.total_ms) * 100)}%`"></div>
-      </div>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
       <div class="text-3xl font-bold text-indigo-600" x-text="data?.timing?.llm_ms + ' мс'"></div>
       <div class="text-xs text-gray-500 mt-1">YandexGPT</div>
-      <div class="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div class="h-full bg-indigo-400 rounded-full"
-          :style="`width:${Math.round((data?.timing?.llm_ms / data?.timing?.total_ms) * 100)}%`"></div>
-      </div>
     </div>
   </div>
 
-  <!-- Ответ + График -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <!-- Ответ -->
+  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+    <h2 class="font-semibold text-gray-800 mb-3">💬 Ответ бота</h2>
+    <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 leading-relaxed" x-text="data?.answer"></div>
+  </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <h2 class="font-semibold text-gray-800 mb-3">💬 Ответ бота</h2>
-      <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 leading-relaxed" x-text="data?.answer"></div>
+  <!-- Распределение времени -->
+  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+    <h2 class="font-semibold text-gray-800 mb-4">⏱ Распределение времени</h2>
+    <div class="flex rounded-full overflow-hidden h-8 text-xs font-medium">
+      <div class="flex items-center justify-center text-white bg-purple-500 transition-all"
+        :style="`width:${Math.round((data?.timing?.search_ms / data?.timing?.total_ms)*100)}%`"
+        x-text="`Поиск ${data?.timing?.search_ms}мс`">
+      </div>
+      <div class="flex items-center justify-center text-white bg-indigo-500 transition-all"
+        :style="`width:${Math.round((data?.timing?.llm_ms / data?.timing?.total_ms)*100)}%`"
+        x-text="`LLM ${data?.timing?.llm_ms}мс`">
+      </div>
     </div>
-
-    <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <h2 class="font-semibold text-gray-800 mb-3">📊 Уверенность по источникам</h2>
-      <canvas id="scoreChart"></canvas>
+    <div class="flex gap-4 mt-2 text-xs text-gray-500">
+      <span><span class="inline-block w-2 h-2 rounded-sm bg-purple-500 mr-1"></span>Поиск ChromaDB</span>
+      <span><span class="inline-block w-2 h-2 rounded-sm bg-indigo-500 mr-1"></span>YandexGPT</span>
     </div>
   </div>
 
@@ -141,12 +140,9 @@
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-semibold text-gray-800">🔍 Найденные фрагменты</h2>
       <div class="flex gap-3 text-xs text-gray-500">
-        <span>
-          <span class="inline-block w-2 h-2 rounded-full bg-purple-400 mr-1"></span>KB-статья
-        </span>
-        <span>
-          <span class="inline-block w-2 h-2 rounded-full bg-cyan-400 mr-1"></span>Тикет
-        </span>
+        <span><span class="inline-block w-2 h-2 rounded-full bg-purple-400 mr-1"></span>KB-статья</span>
+        <span><span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>Решение</span>
+        <span><span class="inline-block w-2 h-2 rounded-full bg-cyan-400 mr-1"></span>Тикет</span>
       </div>
     </div>
 
@@ -155,7 +151,6 @@
         <div class="border rounded-lg overflow-hidden"
           :class="chunk.rank === 1 ? 'border-blue-200' : 'border-gray-100'">
 
-          <!-- Шапка чанка -->
           <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
             :class="chunk.rank === 1 ? 'bg-blue-50' : 'bg-white'"
             @click="chunk.expanded = !chunk.expanded">
@@ -166,8 +161,11 @@
             </div>
 
             <span class="text-xs px-2 py-0.5 rounded font-medium flex-shrink-0"
-              :class="chunk.source === 'kb' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'"
-              x-text="chunk.source === 'kb' ? 'KB-статья' : 'Тикет'">
+              :class="chunk.source === 'kb' ? 'bg-purple-100 text-purple-700' :
+                      chunk.source === 'expense' ? 'bg-amber-100 text-amber-700' :
+                      'bg-cyan-100 text-cyan-700'"
+              x-text="chunk.source === 'kb' ? 'KB-статья' :
+                      chunk.source === 'expense' ? 'Решение' : 'Тикет'">
             </span>
 
             <span class="text-sm text-gray-700 flex-1 truncate" x-text="chunk.title || '(без заголовка)'"></span>
@@ -191,7 +189,6 @@
             </div>
           </div>
 
-          <!-- Текст чанка -->
           <div x-show="chunk.expanded" x-cloak class="border-t border-gray-100 px-4 py-4 bg-white">
             <pre class="text-xs text-gray-600 leading-relaxed" x-text="chunk.text"></pre>
             <div x-show="chunk.service" class="mt-2 text-xs text-gray-400">
@@ -203,25 +200,6 @@
     </div>
   </div>
 
-  <!-- Доля времени -->
-  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-    <h2 class="font-semibold text-gray-800 mb-4">⏱ Распределение времени</h2>
-    <div class="flex rounded-full overflow-hidden h-8 text-xs font-medium">
-      <div class="flex items-center justify-center text-white bg-purple-500 transition-all"
-        :style="`width:${Math.round((data?.timing?.search_ms / data?.timing?.total_ms)*100)}%`"
-        x-text="`Поиск ${data?.timing?.search_ms}мс`">
-      </div>
-      <div class="flex items-center justify-center text-white bg-indigo-500 transition-all"
-        :style="`width:${Math.round((data?.timing?.llm_ms / data?.timing?.total_ms)*100)}%`"
-        x-text="`LLM ${data?.timing?.llm_ms}мс`">
-      </div>
-    </div>
-    <div class="flex gap-4 mt-2 text-xs text-gray-500">
-      <span><span class="inline-block w-2 h-2 rounded-sm bg-purple-500 mr-1"></span>Поиск ChromaDB</span>
-      <span><span class="inline-block w-2 h-2 rounded-sm bg-indigo-500 mr-1"></span>YandexGPT</span>
-    </div>
-  </div>
-
 </div>
 
 <script>
@@ -230,7 +208,6 @@ function analysisPage() {
     aid: null,
     data: null,
     error: null,
-    scoreChart: null,
 
     async init() {
       this.aid = location.pathname.split('/').pop();
@@ -240,7 +217,6 @@ function analysisPage() {
         const d = await r.json();
         d.chunks = d.chunks.map(c => ({ ...c, expanded: c.rank === 1 }));
         this.data = d;
-        this.$nextTick(() => this.renderChart(d.chunks));
       } catch(e) {
         this.error = e.message;
       }
@@ -249,33 +225,6 @@ function analysisPage() {
     formatDate(iso) {
       return new Date(iso).toLocaleString('ru-RU');
     },
-
-    renderChart(chunks) {
-      const ctx = document.getElementById('scoreChart');
-      if (!ctx) return;
-      this.scoreChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: chunks.map(c => `#${c.rank} ${(c.title || c.source).slice(0, 18)}`),
-          datasets: [{
-            data: chunks.map(c => +(c.score * 100).toFixed(1)),
-            backgroundColor: chunks.map(c =>
-              c.score > 0.7 ? 'rgba(34,197,94,0.75)' :
-              c.score > 0.5 ? 'rgba(234,179,8,0.75)' : 'rgba(239,68,68,0.75)'
-            ),
-            borderRadius: 6,
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { min: 0, max: 100, ticks: { callback: v => v + '%' } },
-            x: { ticks: { font: { size: 10 } } }
-          }
-        }
-      });
-    }
   }
 }
 </script>
