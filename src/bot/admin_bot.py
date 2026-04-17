@@ -66,12 +66,16 @@ def _escalation_keyboard(aid: str) -> InlineKeyboardMarkup:
 
 def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) -> str:
     status = "Эскалация — требует ответа оператора" if escalated else "Автоответ"
+    truncated = answer[:600] + ("..." if len(answer) > 600 else "")
     return "\n".join([
         f"Запрос #{analysis_id[:8]}",
         "",
         f"Вопрос: {question}",
         "",
-        f"Ответ модели: {answer[:600]}{'...' if len(answer) > 600 else ''}",
+        "Ответ модели:",
+        truncated,
+        "",
+        f"Анализ: localhost:8001/analysis/{analysis_id}",
         "",
         f"Статус: {status}",
         "",
@@ -291,4 +295,9 @@ def main():
 
 
 if __name__ == "__main__":
+    import asyncio
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
     main()

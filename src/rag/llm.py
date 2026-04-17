@@ -34,6 +34,21 @@ FALLBACK = (
 
 EXTRACT_PROMPT = "Выдели суть IT-проблемы из сообщения пользователя одним коротким предложением на русском. Только суть, без лишних слов. Сообщение: {query}"
 
+_NO_INFO_MARKERS = [
+    "нет информации",
+    "не содержит информации",
+    "не могу найти",
+    "отсутствует в контексте",
+    "нет данных",
+    "предоставленном контексте нет",
+    "в контексте не",
+]
+
+
+def _is_escalated(top_score: float, answer: str) -> bool:
+    a = answer.lower()
+    return top_score < 0.45 or "не знаю" in a or any(m in a for m in _NO_INFO_MARKERS)
+
 
 def extract_query(user_query: str) -> str:
     """Очищает запрос от шума через LLM перед поиском."""
@@ -117,7 +132,7 @@ def ask(user_query: str) -> tuple[str, bool]:
         {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
     ])
 
-    escalated = results[0]["score"] < 0.45 or "не знаю" in answer.lower()
+    escalated = _is_escalated(results[0]["score"], answer)
     return answer, escalated
 
 
@@ -140,7 +155,7 @@ def ask_full(user_query: str) -> dict:
         {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
     ])
     classification = classify(user_query)
-    escalated = results[0]["score"] < 0.45 or "не знаю" in answer.lower()
+    escalated = _is_escalated(results[0]["score"], answer)
 
     top = results[0]
     top_source = {

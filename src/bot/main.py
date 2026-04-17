@@ -70,20 +70,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         top_source = None
         data = {}
 
-    parts = [html.escape(answer)]
-
-    if top_source and top_source.get("title"):
-        src_label = "KB" if top_source.get("source") == "kb" else ("Решение" if top_source.get("source") == "expense" else "Тикет")
-        parts.append(f"\n<i>📎 {src_label}: {html.escape(top_source['title'][:60])}</i>")
+    analysis_id = data.get("analysis_id") if isinstance(data, dict) else None
 
     if escalated:
-        parts.append("\n⚠️ <i>Не нашёл точного решения. Рекомендую обратиться к специалисту поддержки или создать заявку.</i>")
-
-    analysis_id = data.get("analysis_id") if isinstance(data, dict) else None
-    if analysis_id:
-        parts.append(f'\n🔍 <code>localhost:8001/analysis/{analysis_id}</code>')
-
-    text = "\n".join(parts)
+        text = "Ваш запрос передан специалисту поддержки. Ожидайте ответа."
+    else:
+        parts = [html.escape(answer)]
+        if top_source and top_source.get("title"):
+            src_label = "KB" if top_source.get("source") == "kb" else ("Решение" if top_source.get("source") == "expense" else "Тикет")
+            parts.append(f"\n<i>📎 {src_label}: {html.escape(top_source['title'][:60])}</i>")
+        text = "\n".join(parts)
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     log_dialog(user_id, query, answer, escalated)
