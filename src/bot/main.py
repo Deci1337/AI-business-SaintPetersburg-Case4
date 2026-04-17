@@ -88,6 +88,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     log_dialog(user_id, query, answer, escalated)
 
+    try:
+        from src.bot.admin_bot import notify_admins
+        asyncio.create_task(notify_admins(
+            analysis_id=data.get("analysis_id", ""),
+            question=query,
+            answer=answer,
+            escalated=escalated,
+            user_chat_id=update.effective_chat.id,
+        ))
+    except Exception as e:
+        logging.warning(f"notify_admins error: {e}")
+
 
 def main():
     try:

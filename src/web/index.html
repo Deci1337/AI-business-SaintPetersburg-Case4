@@ -3,75 +3,64 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>БалтБерег — RAG Inspector</title>
+<title>Балтийский Берег — Service Desk AI</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-  [x-cloak] { display: none !important; }
-  .score-bar { transition: width 0.6s ease; }
-  .fade-in { animation: fadeIn 0.4s ease; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  .chunk-card:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-  .chunk-card { transition: all 0.2s ease; }
-  pre { white-space: pre-wrap; word-break: break-word; }
+  [x-cloak]{display:none!important}
+  .fade-in{animation:fadeIn .35s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  pre{white-space:pre-wrap;word-break:break-word}
+  .chunk-row:hover{background:#f8fafc}
 </style>
 </head>
-<body class="bg-gray-50 min-h-screen" x-data="ragInspector()">
+<body class="bg-slate-50 min-h-screen text-gray-800" x-data="ragInspector()">
 
 <!-- Header -->
-<header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-  <div class="flex items-center gap-3">
-    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-      <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
-      </svg>
-    </div>
-    <div>
-      <h1 class="font-bold text-gray-900 text-lg leading-none">RAG Inspector</h1>
-      <p class="text-xs text-gray-400">Балтийский Берег — Сервис-деск AI</p>
-    </div>
+<header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+  <div>
+    <div class="text-base font-semibold text-gray-900 leading-tight">Балтийский Берег</div>
+    <div class="text-xs text-gray-400 mt-0.5">Service Desk AI — RAG Inspector</div>
   </div>
   <div class="flex items-center gap-2">
-    <div class="w-2 h-2 rounded-full" :class="apiOk ? 'bg-green-400' : 'bg-red-400'"></div>
+    <div class="w-2 h-2 rounded-full" :class="apiOk ? 'bg-emerald-400' : 'bg-red-400'"></div>
     <span class="text-xs text-gray-500" x-text="apiOk ? 'API онлайн' : 'API недоступен'"></span>
   </div>
 </header>
 
-<div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+<div class="max-w-7xl mx-auto px-6 py-6 space-y-5">
 
-  <!-- Поиск -->
-  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-    <label class="block text-sm font-medium text-gray-700 mb-2">Задайте вопрос сотрудника</label>
+  <!-- Поисковая строка -->
+  <div class="bg-white rounded-lg border border-gray-200 p-5">
+    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Задайте вопрос сотрудника</div>
     <div class="flex gap-3">
       <input
         x-model="query"
         @keydown.enter="submit"
         type="text"
         placeholder="Например: не подключается VPN, ошибка в 1С при отчёте..."
-        class="flex-1 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        class="flex-1 border border-gray-300 rounded-md px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         :disabled="loading"
       >
       <button
         @click="submit"
         :disabled="loading || !query.trim()"
-        class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 min-w-[120px] justify-center"
+        class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-5 py-2.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-center"
       >
-        <svg x-show="loading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+        <svg x-show="loading" class="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
         </svg>
-        <span x-text="loading ? 'Думаю...' : 'Спросить'"></span>
+        <span x-text="loading ? 'Поиск...' : 'Спросить'"></span>
       </button>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
-      <span class="text-xs text-gray-400 self-center">Примеры:</span>
+      <span class="text-xs text-gray-400">Примеры:</span>
       <template x-for="q in quickQuestions" :key="q">
-        <button
-          @click="query = q; submit()"
-          class="text-xs bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600 px-3 py-1.5 rounded-full transition-colors"
-          x-text="q"
-        ></button>
+        <button @click="query = q; submit()"
+          class="text-xs bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600 px-3 py-1 rounded transition-colors"
+          x-text="q"></button>
       </template>
     </div>
   </div>
@@ -80,46 +69,54 @@
   <div x-show="result" x-cloak class="fade-in space-y-4">
 
     <!-- Метрики запроса -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
-        <div class="text-2xl font-bold text-blue-600" x-text="result?.timing?.total_ms + ' мс'"></div>
-        <div class="text-xs text-gray-500 mt-1">Общее время</div>
+    <div class="grid grid-cols-4 gap-3">
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-400 mb-1">Общее время</div>
+        <div class="text-xl font-semibold text-blue-600" x-text="result?.timing?.total_ms + ' мс'"></div>
       </div>
-      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
-        <div class="text-2xl font-bold text-purple-600" x-text="result?.timing?.search_ms + ' мс'"></div>
-        <div class="text-xs text-gray-500 mt-1">Поиск в базе</div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-400 mb-1">Поиск</div>
+        <div class="text-xl font-semibold text-violet-600" x-text="result?.timing?.search_ms + ' мс'"></div>
       </div>
-      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
-        <div class="text-2xl font-bold text-indigo-600" x-text="result?.timing?.llm_ms + ' мс'"></div>
-        <div class="text-xs text-gray-500 mt-1">YandexGPT</div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-400 mb-1">YandexGPT</div>
+        <div class="text-xl font-semibold text-indigo-600" x-text="result?.timing?.llm_ms + ' мс'"></div>
       </div>
-      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
-        <div class="text-2xl font-bold" :class="result?.escalated ? 'text-orange-500' : 'text-green-500'"
-          x-text="result?.escalated ? '⚠️ Эскалация' : '✅ Решено'">
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-400 mb-1">Статус</div>
+        <div class="text-sm font-semibold mt-0.5"
+          :class="result?.escalated ? 'text-orange-500' : 'text-emerald-600'"
+          x-text="result?.escalated ? 'Эскалация' : 'Решено автоматически'">
         </div>
-        <div class="text-xs text-gray-500 mt-1">Статус</div>
       </div>
     </div>
 
     <!-- Классификация -->
     <div x-show="result?.classification" class="grid grid-cols-2 gap-3">
-      <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex items-center gap-3">
-        <div class="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center text-lg">🗂</div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3">
+        <div class="w-1 h-8 bg-violet-400 rounded-full flex-shrink-0"></div>
         <div>
           <div class="text-xs text-gray-400">Категория сервиса</div>
-          <div class="font-semibold text-gray-800 text-sm" x-text="result?.classification?.service || '—'"></div>
+          <div class="font-medium text-gray-800 text-sm mt-0.5" x-text="result?.classification?.service || '—'"></div>
         </div>
       </div>
-      <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex items-center gap-3">
-        <div class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center text-lg">🎯</div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3">
+        <div class="w-1 h-8 rounded-full flex-shrink-0"
+          :class="{
+            'bg-red-500': result?.classification?.priority === 'Критичный',
+            'bg-orange-400': result?.classification?.priority === 'Высокий',
+            'bg-yellow-400': result?.classification?.priority === 'Средний',
+            'bg-emerald-400': result?.classification?.priority === 'Низкий',
+          }">
+        </div>
         <div>
           <div class="text-xs text-gray-400">Приоритет</div>
-          <div class="font-semibold text-sm"
+          <div class="font-medium text-sm mt-0.5"
             :class="{
               'text-red-600': result?.classification?.priority === 'Критичный',
               'text-orange-500': result?.classification?.priority === 'Высокий',
               'text-yellow-600': result?.classification?.priority === 'Средний',
-              'text-green-600': result?.classification?.priority === 'Низкий',
+              'text-emerald-600': result?.classification?.priority === 'Низкий',
             }"
             x-text="result?.classification?.priority || '—'">
           </div>
@@ -127,79 +124,68 @@
       </div>
     </div>
 
-    <!-- Ответ + Чанки -->
+    <!-- Ответ + Фрагменты -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
       <!-- Ответ -->
-      <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-semibold text-gray-800">💬 Ответ бота</h2>
-          <span class="text-xs px-2 py-1 rounded-full"
-            :class="result?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
+      <div class="bg-white rounded-lg border border-gray-200 p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-sm font-medium text-gray-700">Ответ модели</div>
+          <span class="text-xs px-2 py-0.5 rounded font-medium"
+            :class="result?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'"
             x-text="result?.escalated ? 'Нужен оператор' : 'Автоответ'">
           </span>
         </div>
-        <div class="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-lg p-4" x-text="result?.answer"></div>
+        <div class="text-sm text-gray-700 leading-relaxed bg-slate-50 rounded-md p-4 border border-gray-100" x-text="result?.answer"></div>
         <div x-show="result?.top_source" class="mt-3 flex items-center gap-2 text-xs text-gray-500">
-          <span class="px-2 py-0.5 rounded font-medium"
-            :class="result?.top_source?.source === 'kb' ? 'bg-purple-100 text-purple-700' :
-                    result?.top_source?.source === 'expense' ? 'bg-amber-100 text-amber-700' :
-                    'bg-cyan-100 text-cyan-700'"
+          <span class="px-2 py-0.5 rounded font-medium border"
+            :class="result?.top_source?.source === 'kb' ? 'border-violet-200 bg-violet-50 text-violet-700' :
+                    result?.top_source?.source === 'expense' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-cyan-200 bg-cyan-50 text-cyan-700'"
             x-text="result?.top_source?.source === 'kb' ? 'KB' :
                     result?.top_source?.source === 'expense' ? 'Решение' : 'Тикет'">
           </span>
-          <span x-text="result?.top_source?.title"></span>
-          <span class="font-mono text-green-600" x-text="'(' + (result?.top_source?.score * 100).toFixed(0) + '%)'"></span>
+          <span class="truncate" x-text="result?.top_source?.title"></span>
+          <span class="font-mono text-emerald-600 flex-shrink-0" x-text="(result?.top_source?.score * 100).toFixed(0) + '%'"></span>
         </div>
-        <div x-show="result?.analysis_url" class="mt-4">
+        <div x-show="result?.analysis_id" class="mt-3">
           <a :href="`/analysis/${result?.analysis_id}`" target="_blank"
-            class="inline-flex items-center gap-2 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg transition-colors font-medium">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-            </svg>
+            class="text-xs text-blue-600 hover:underline">
             Открыть полный анализ →
           </a>
         </div>
       </div>
 
-      <!-- Чанки -->
-      <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-semibold text-gray-800">🔍 Найденные фрагменты</h2>
-          <span class="text-xs text-gray-400" x-text="result?.chunks?.length + ' фрагментов'"></span>
+      <!-- Фрагменты -->
+      <div class="bg-white rounded-lg border border-gray-200 p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-sm font-medium text-gray-700">Найденные фрагменты</div>
+          <div class="flex gap-3 text-xs text-gray-400">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400 inline-block"></span>KB</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Решение</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>Тикет</span>
+          </div>
         </div>
-        <div class="space-y-2">
+        <div class="space-y-1.5">
           <template x-for="chunk in result?.chunks" :key="chunk.rank">
-            <div class="chunk-card border rounded-lg p-3 cursor-pointer"
-              :class="chunk.rank === 1 ? 'border-blue-200 bg-blue-50' : 'border-gray-100 bg-gray-50'"
+            <div class="chunk-row rounded-md border cursor-pointer transition-colors"
+              :class="chunk.rank === 1 ? 'border-blue-200 bg-blue-50' : 'border-gray-100'"
               @click="chunk.expanded = !chunk.expanded">
-              <div class="flex items-center gap-2">
-                <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                  :class="chunk.rank === 1 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'"
-                  x-text="chunk.rank">
-                </div>
+              <div class="flex items-center gap-2.5 px-3 py-2">
+                <span class="text-xs font-bold text-gray-400 w-4 flex-shrink-0" x-text="chunk.rank"></span>
                 <span class="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0"
-                  :class="chunk.source === 'kb' ? 'bg-purple-100 text-purple-700' :
+                  :class="chunk.source === 'kb' ? 'bg-violet-100 text-violet-700' :
                           chunk.source === 'expense' ? 'bg-amber-100 text-amber-700' :
                           'bg-cyan-100 text-cyan-700'"
-                  x-text="chunk.source === 'kb' ? 'KB' :
-                          chunk.source === 'expense' ? 'Решение' : 'Тикет'">
+                  x-text="chunk.source === 'kb' ? 'KB' : chunk.source === 'expense' ? 'Решение' : 'Тикет'">
                 </span>
                 <span class="text-xs text-gray-700 truncate flex-1" x-text="chunk.title || '(без заголовка)'"></span>
-                <div class="flex items-center gap-1.5 flex-shrink-0">
-                  <div class="w-16 bg-gray-200 rounded-full h-1.5">
-                    <div class="score-bar h-1.5 rounded-full"
-                      :class="chunk.score > 0.7 ? 'bg-green-500' : chunk.score > 0.5 ? 'bg-yellow-400' : 'bg-red-400'"
-                      :style="'width:' + (chunk.score * 100) + '%'">
-                    </div>
-                  </div>
-                  <span class="text-xs font-mono font-bold w-9 text-right"
-                    :class="chunk.score > 0.7 ? 'text-green-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
-                    x-text="(chunk.score * 100).toFixed(0) + '%'">
-                  </span>
-                </div>
+                <span class="text-xs font-mono font-semibold flex-shrink-0"
+                  :class="chunk.score > 0.7 ? 'text-emerald-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
+                  x-text="(chunk.score * 100).toFixed(0) + '%'">
+                </span>
               </div>
-              <div x-show="chunk.expanded" x-cloak class="mt-2 pt-2 border-t border-gray-200">
+              <div x-show="chunk.expanded" x-cloak class="border-t border-gray-100 px-3 py-3">
                 <pre class="text-xs text-gray-600 leading-relaxed" x-text="chunk.text"></pre>
               </div>
             </div>
@@ -207,118 +193,163 @@
         </div>
       </div>
     </div>
-
   </div>
 
   <!-- Статистика реальной БД -->
-  <div x-show="dbStats" x-cloak class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h2 class="font-semibold text-gray-800 mb-1">🗄 Реальная база — последние 12 месяцев</h2>
-    <p class="text-xs text-gray-400 mb-4">Данные из MSSQL сервис-деска «Балтийский Берег»</p>
+  <div x-show="dbStats" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="text-sm font-medium text-gray-700 mb-1">Статистика базы — последние 12 месяцев</div>
+    <div class="text-xs text-gray-400 mb-5">Данные из MSSQL сервис-деска «Балтийский Берег»</div>
 
-    <!-- Счётчики -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="text-center">
-        <div class="text-3xl font-bold text-gray-900" x-text="dbStats?.total_tasks?.toLocaleString('ru-RU')"></div>
+    <div class="grid grid-cols-4 gap-4 mb-6">
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-gray-900" x-text="dbStats?.total_tasks?.toLocaleString('ru-RU')"></div>
         <div class="text-xs text-gray-400 mt-1">Всего заявок</div>
       </div>
-      <div class="text-center">
-        <div class="text-3xl font-bold text-green-600" x-text="dbStats?.closed_tasks?.toLocaleString('ru-RU')"></div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-emerald-600" x-text="dbStats?.closed_tasks?.toLocaleString('ru-RU')"></div>
         <div class="text-xs text-gray-400 mt-1">Закрыто</div>
       </div>
-      <div class="text-center">
-        <div class="text-3xl font-bold text-red-500" x-text="dbStats?.overdue_tasks?.toLocaleString('ru-RU')"></div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-red-500" x-text="dbStats?.overdue_tasks?.toLocaleString('ru-RU')"></div>
         <div class="text-xs text-gray-400 mt-1">Просрочено</div>
       </div>
-      <div class="text-center">
-        <div class="text-3xl font-bold text-blue-600" x-text="dbStats?.avg_resolution_hours ? dbStats.avg_resolution_hours + ' ч' : '—'"></div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-blue-600" x-text="dbStats?.avg_resolution_hours ? dbStats.avg_resolution_hours + ' ч' : '—'"></div>
         <div class="text-xs text-gray-400 mt-1">Среднее время решения</div>
       </div>
     </div>
 
-    <!-- Графики -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div>
-        <p class="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Топ сервисов по заявкам</p>
-        <canvas id="dbServicesChart" height="220"></canvas>
+        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Топ сервисов по заявкам</div>
+        <canvas id="dbServicesChart"></canvas>
       </div>
       <div>
-        <p class="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Динамика по месяцам</p>
-        <canvas id="dbMonthlyChart" height="220"></canvas>
+        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Динамика по месяцам</div>
+        <canvas id="dbMonthlyChart"></canvas>
       </div>
     </div>
   </div>
 
   <!-- Статистика сессии -->
-  <div x-show="stats && stats.total > 0" x-cloak class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h2 class="font-semibold text-gray-800 mb-1">📈 Статистика сессии</h2>
-    <p class="text-xs text-gray-400 mb-4">Запросы с момента запуска сервера</p>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-      <div class="text-center">
-        <div class="text-3xl font-bold text-gray-900" x-text="stats?.total"></div>
-        <div class="text-xs text-gray-400 mt-1">Всего запросов</div>
+  <div x-show="stats && stats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="text-sm font-medium text-gray-700 mb-1">Статистика сессии</div>
+    <div class="text-xs text-gray-400 mb-5">Запросы с момента запуска сервера</div>
+
+    <div class="grid grid-cols-4 gap-4 mb-6">
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-gray-900" x-text="stats?.total"></div>
+        <div class="text-xs text-gray-400 mt-1">Запросов</div>
       </div>
-      <div class="text-center">
-        <div class="text-3xl font-bold text-green-600" x-text="stats?.automation_rate + '%'"></div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-emerald-600" x-text="stats?.automation_rate + '%'"></div>
         <div class="text-xs text-gray-400 mt-1">Автоматизация</div>
       </div>
-      <div class="text-center">
-        <div class="text-3xl font-bold text-orange-500" x-text="stats?.escalation_rate + '%'"></div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-orange-500" x-text="stats?.escalation_rate + '%'"></div>
         <div class="text-xs text-gray-400 mt-1">Эскалаций</div>
       </div>
-      <div class="text-center">
-        <div class="text-3xl font-bold text-blue-600" x-text="stats?.avg_ms + ' мс'"></div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-blue-600" x-text="stats?.avg_ms + ' мс'"></div>
         <div class="text-xs text-gray-400 mt-1">Среднее время</div>
       </div>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+    <div class="grid grid-cols-2 gap-6">
       <div>
-        <p class="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">По категориям</p>
-        <canvas id="serviceChart" height="160"></canvas>
+        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По категориям</div>
+        <canvas id="serviceChart"></canvas>
       </div>
       <div>
-        <p class="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">По приоритетам</p>
-        <canvas id="priorityChart" height="160"></canvas>
+        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По приоритетам</div>
+        <canvas id="priorityChart"></canvas>
       </div>
     </div>
   </div>
 
-  <!-- Все запросы сессии -->
-  <div x-show="allAnalyses.length > 0" x-cloak class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <!-- Оценки модели -->
+  <div x-show="ratingsStats && ratingsStats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="text-sm font-medium text-gray-700 mb-1">Оценки операторов</div>
+    <div class="text-xs text-gray-400 mb-5">Средняя оценка качества ответов модели</div>
+    <div class="grid grid-cols-3 gap-4 mb-5">
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-gray-900" x-text="ratingsStats?.total"></div>
+        <div class="text-xs text-gray-400 mt-1">Оценок получено</div>
+      </div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-blue-600" x-text="ratingsStats?.avg_score ? ratingsStats.avg_score + ' / 5' : '—'"></div>
+        <div class="text-xs text-gray-400 mt-1">Средняя оценка</div>
+      </div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-emerald-600"
+          x-text="ratingsStats?.distribution?.['5'] || 0">
+        </div>
+        <div class="text-xs text-gray-400 mt-1">Оценок «5»</div>
+      </div>
+    </div>
+    <div>
+      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Распределение оценок</div>
+      <canvas id="ratingsChart" height="80"></canvas>
+    </div>
+  </div>
+
+  <!-- Список запросов -->
+  <div x-show="allAnalyses.length > 0" x-cloak class="bg-white rounded-lg border border-gray-200 overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-      <h2 class="font-semibold text-gray-800">📋 Все запросы сессии</h2>
+      <div class="text-sm font-medium text-gray-700">Запросы сессии</div>
       <span class="text-xs text-gray-400" x-text="allAnalyses.length + ' запросов'"></span>
     </div>
-    <div class="divide-y divide-gray-50">
-      <template x-for="a in allAnalyses" :key="a.id">
-        <a :href="`/analysis/${a.id}`" target="_blank"
-          class="flex items-center gap-4 px-6 py-3 hover:bg-gray-50 transition-colors group">
-          <span class="w-2 h-2 rounded-full flex-shrink-0"
-            :class="a.escalated ? 'bg-orange-400' : 'bg-green-400'">
-          </span>
-          <span class="text-sm text-gray-700 flex-1 truncate" x-text="a.question"></span>
-          <span class="text-xs text-gray-400 flex-shrink-0" x-text="a.total_ms + ' мс'"></span>
-          <span class="text-xs px-2 py-0.5 rounded flex-shrink-0"
-            :class="a.source === 'telegram' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'"
-            x-text="a.source === 'telegram' ? '📱' : '🌐'">
-          </span>
-          <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-500 flex-shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        </a>
-      </template>
-    </div>
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wide">
+          <th class="text-left px-6 py-3 font-medium">Вопрос</th>
+          <th class="text-left px-4 py-3 font-medium">Статус</th>
+          <th class="text-left px-4 py-3 font-medium">Время</th>
+          <th class="text-left px-4 py-3 font-medium">Канал</th>
+          <th class="px-4 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="a in allAnalyses" :key="a.id">
+          <tr class="border-b border-gray-50 hover:bg-slate-50 transition-colors">
+            <td class="px-6 py-3 text-gray-700 max-w-xs truncate" x-text="a.question"></td>
+            <td class="px-4 py-3">
+              <span class="text-xs px-2 py-0.5 rounded font-medium"
+                :class="a.escalated ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'"
+                x-text="a.escalated ? 'Эскалация' : 'Решено'">
+              </span>
+            </td>
+            <td class="px-4 py-3 text-xs text-gray-500 font-mono" x-text="a.total_ms + ' мс'"></td>
+            <td class="px-4 py-3 text-xs text-gray-500" x-text="a.source === 'telegram' ? 'Telegram' : 'Web'"></td>
+            <td class="px-4 py-3">
+              <a :href="`/analysis/${a.id}`" target="_blank"
+                class="text-xs text-blue-600 hover:underline">Анализ</a>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
   </div>
 
   <!-- Пустое состояние -->
   <div x-show="!result && !loading" class="text-center py-16 text-gray-400">
-    <div class="text-5xl mb-4">🤖</div>
+    <div class="w-12 h-12 border-2 border-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
+      <svg class="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+      </svg>
+    </div>
     <p class="text-sm">Задайте вопрос — увидите как работает RAG изнутри</p>
-    <p class="text-xs mt-1">Поиск по 85 806 тикетам, 1 680 KB-статьям и 9 864 решениям инженеров</p>
+    <p class="text-xs mt-1 text-gray-300">Поиск по 85 000+ тикетам, 1 680 KB-статьям и 9 864 решениям</p>
   </div>
 
 </div>
 
 <script>
+const CHART_DEFAULTS = {
+  responsive: true,
+  plugins: { legend: { display: false } },
+};
+
 function ragInspector() {
   return {
     query: '',
@@ -328,12 +359,8 @@ function ragInspector() {
     allAnalyses: [],
     stats: null,
     dbStats: null,
-    scoreChart: null,
-    historyChart: null,
-    serviceChart: null,
-    priorityChart: null,
-    dbServicesChart: null,
-    dbMonthlyChart: null,
+    ratingsStats: null,
+    charts: {},
     quickQuestions: [
       'Не подключается VPN',
       'Ошибка в 1С при отчёте',
@@ -343,32 +370,24 @@ function ragInspector() {
     ],
 
     async init() {
-      try {
-        const r = await fetch('/health');
-        this.apiOk = r.ok;
-      } catch { this.apiOk = false; }
-      await Promise.all([
-        this.loadAnalysesList(),
-        this.loadDbStats(),
-      ]);
+      try { this.apiOk = (await fetch('/health')).ok; } catch { this.apiOk = false; }
+      await Promise.all([this.loadAnalysesList(), this.loadDbStats(), this.loadRatings()]);
     },
 
     async loadAnalysesList() {
-      try {
-        const r = await fetch('/analyses');
-        this.allAnalyses = await r.json();
-      } catch {}
+      try { this.allAnalyses = await (await fetch('/analyses')).json(); } catch {}
       await this.loadStats();
     },
 
     async loadStats() {
       try {
-        const r = await fetch('/stats');
-        this.stats = await r.json();
-        if (this.stats?.total > 0) {
+        const s = await (await fetch('/stats')).json();
+        this.stats = s;
+        if (s?.total > 0) {
           this.$nextTick(() => {
-            this.renderServiceChart(this.stats.by_service);
-            this.renderPriorityChart(this.stats.by_priority);
+            this.renderBarChart('serviceChart', s.by_service,
+              ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#64748b']);
+            this.renderPriorityChart('priorityChart', s.by_priority);
           });
         }
       } catch {}
@@ -380,107 +399,113 @@ function ragInspector() {
         if (!r.ok) return;
         this.dbStats = await r.json();
         this.$nextTick(() => {
-          this.renderDbServicesChart(this.dbStats.top_services);
-          this.renderDbMonthlyChart(this.dbStats.monthly);
+          this.renderHBarChart('dbServicesChart', this.dbStats.top_services);
+          this.renderLineChart('dbMonthlyChart', this.dbStats.monthly);
         });
       } catch {}
     },
 
-    renderDbServicesChart(data) {
-      const ctx = document.getElementById('dbServicesChart');
+    async loadRatings() {
+      try {
+        const r = await fetch('/ratings/stats');
+        if (!r.ok) return;
+        this.ratingsStats = await r.json();
+        if (this.ratingsStats?.total > 0) {
+          this.$nextTick(() => this.renderRatingsChart('ratingsChart', this.ratingsStats.distribution));
+        }
+      } catch {}
+    },
+
+    renderHBarChart(id, data) {
+      const ctx = document.getElementById(id);
       if (!ctx || !data) return;
-      if (this.dbServicesChart) this.dbServicesChart.destroy();
-      const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 10);
-      this.dbServicesChart = new Chart(ctx, {
+      if (this.charts[id]) this.charts[id].destroy();
+      const sorted = Object.entries(data).sort((a,b) => b[1]-a[1]).slice(0,10);
+      this.charts[id] = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: sorted.map(([k]) => k),
-          datasets: [{ data: sorted.map(([, v]) => v), backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 4 }]
+          datasets: [{ data: sorted.map(([,v]) => v), backgroundColor: 'rgba(99,102,241,0.75)', borderRadius: 3 }]
         },
-        options: {
-          indexAxis: 'y', responsive: true,
-          plugins: { legend: { display: false } },
-          scales: { x: { beginAtZero: true }, y: { ticks: { font: { size: 11 } } } }
+        options: { ...CHART_DEFAULTS, indexAxis: 'y',
+          scales: { x: { beginAtZero: true, grid: { color: '#f1f5f9' } }, y: { ticks: { font: { size: 11 } }, grid: { display: false } } }
         }
       });
     },
 
-    renderDbMonthlyChart(data) {
-      const ctx = document.getElementById('dbMonthlyChart');
+    renderLineChart(id, data) {
+      const ctx = document.getElementById(id);
       if (!ctx || !data) return;
-      if (this.dbMonthlyChart) this.dbMonthlyChart.destroy();
-      const months = ['', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-      this.dbMonthlyChart = new Chart(ctx, {
+      if (this.charts[id]) this.charts[id].destroy();
+      this.charts[id] = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: data.map(d => `${months[d.month]} ${d.year}`),
-          datasets: [{
-            label: 'Заявок',
-            data: data.map(d => d.count),
-            borderColor: 'rgb(16,185,129)',
-            backgroundColor: 'rgba(16,185,129,0.1)',
-            tension: 0.4, fill: true,
-          }]
+          labels: Object.keys(data),
+          datasets: [{ data: Object.values(data), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)', tension: 0.3, fill: true, pointRadius: 3, pointBackgroundColor: '#6366f1' }]
         },
-        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        options: { ...CHART_DEFAULTS,
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'Заявок', font: { size: 10 }, color: '#94a3b8' }, grid: { color: '#f1f5f9' } }, x: { ticks: { font: { size: 10 } }, grid: { display: false } } }
+        }
       });
     },
 
-    renderScoreChart(chunks) {
-      const ctx = document.getElementById('scoreChart');
-      if (!ctx) return;
-      if (this.scoreChart) this.scoreChart.destroy();
-      this.scoreChart = new Chart(ctx, {
+    renderBarChart(id, data, colors) {
+      const ctx = document.getElementById(id);
+      if (!ctx || !data) return;
+      if (this.charts[id]) this.charts[id].destroy();
+      const labels = Object.keys(data);
+      this.charts[id] = new Chart(ctx, {
         type: 'bar',
-        data: {
-          labels: chunks.map(c => `#${c.rank} ${c.title.slice(0, 20) || c.source}`),
-          datasets: [{
-            label: 'Уверенность',
-            data: chunks.map(c => +(c.score * 100).toFixed(1)),
-            backgroundColor: chunks.map(c =>
-              c.score > 0.7 ? 'rgba(34,197,94,0.7)' :
-              c.score > 0.5 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'
-            ),
-            borderRadius: 6,
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { min: 0, max: 100, ticks: { callback: v => v + '%' } },
-            x: { ticks: { font: { size: 10 } } }
-          }
-        }
+        data: { labels, datasets: [{ data: Object.values(data), backgroundColor: colors || '#6366f1', borderRadius: 3 }] },
+        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
       });
     },
 
-    renderHistoryChart() {
-      const ctx = document.getElementById('historyChart');
-      if (!ctx) return;
-      if (this.historyChart) this.historyChart.destroy();
-      this.historyChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: this.history.map((_, i) => `Запрос ${i + 1}`),
-          datasets: [{
-            label: 'Время ответа (мс)',
-            data: this.history.map(h => h.total_ms),
-            borderColor: 'rgb(99,102,241)',
-            backgroundColor: 'rgba(99,102,241,0.1)',
-            tension: 0.4,
-            fill: true,
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { ticks: { callback: v => v + ' мс' } }
-          }
-        }
+    renderPriorityChart(id, data) {
+      const colorMap = { 'Критичный':'#ef4444','Высокий':'#f97316','Средний':'#eab308','Низкий':'#22c55e' };
+      const ctx = document.getElementById(id);
+      if (!ctx || !data) return;
+      if (this.charts[id]) this.charts[id].destroy();
+      const labels = Object.keys(data);
+      this.charts[id] = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ data: Object.values(data), backgroundColor: labels.map(l => colorMap[l] || '#64748b'), borderRadius: 3 }] },
+        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
       });
-    }
+    },
+
+    renderRatingsChart(id, dist) {
+      const ctx = document.getElementById(id);
+      if (!ctx || !dist) return;
+      if (this.charts[id]) this.charts[id].destroy();
+      const labels = ['1','2','3','4','5'];
+      const colors = ['#ef4444','#f97316','#eab308','#84cc16','#22c55e'];
+      this.charts[id] = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ data: labels.map(l => dist[l] || 0), backgroundColor: colors, borderRadius: 3 }] },
+        options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
+      });
+    },
+
+    async submit() {
+      if (!this.query.trim() || this.loading) return;
+      this.loading = true;
+      const q = this.query.trim();
+      try {
+        const data = await (await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q }),
+        })).json();
+        data.chunks = data.chunks.map(c => ({ ...c, expanded: false }));
+        this.result = data;
+        await this.loadAnalysesList();
+      } catch (e) {
+        alert('Ошибка API: ' + e.message);
+      } finally {
+        this.loading = false;
+      }
+    },
   }
 }
 </script>

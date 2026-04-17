@@ -3,190 +3,170 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Анализ запроса — БалтБерег</title>
+<title>Анализ запроса — Балтийский Берег</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 <style>
   [x-cloak]{display:none!important}
-  .fade-in{animation:fadeIn .35s ease}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .fade-in{animation:fadeIn .3s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
   pre{white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
-<body class="bg-gray-50 min-h-screen" x-data="analysisPage()">
+<body class="bg-slate-50 min-h-screen text-gray-800" x-data="analysisPage()">
 
-<header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-  <div class="flex items-center gap-3">
-    <a href="/" class="text-gray-400 hover:text-blue-600 transition-colors">
-      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-      </svg>
-    </a>
-    <div>
-      <h1 class="font-bold text-gray-900 text-lg leading-none">Анализ запроса</h1>
-      <p class="text-xs text-gray-400" x-text="data ? formatDate(data.created_at) : '...'"></p>
-    </div>
+<header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center gap-4">
+  <a href="/" class="text-gray-400 hover:text-blue-600 transition-colors flex-shrink-0">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+  </a>
+  <div class="flex-1">
+    <div class="text-base font-semibold text-gray-900 leading-tight">Анализ запроса</div>
+    <div class="text-xs text-gray-400 mt-0.5" x-text="data ? formatDate(data.created_at) : '...'"></div>
   </div>
-  <div class="flex items-center gap-2">
-    <span class="text-xs text-gray-400 font-mono" x-text="aid"></span>
-  </div>
+  <span class="text-xs text-gray-300 font-mono" x-text="aid"></span>
 </header>
 
-<div class="max-w-6xl mx-auto px-4 py-6" x-show="!data && !error">
+<div class="max-w-5xl mx-auto px-6 py-6" x-show="!data && !error">
   <div class="text-center py-20 text-gray-400">
     <div class="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
     Загружаю анализ...
   </div>
 </div>
 
-<div class="max-w-6xl mx-auto px-4 py-6" x-show="error" x-cloak>
-  <div class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-    <p class="text-red-600" x-text="error"></p>
+<div class="max-w-5xl mx-auto px-6 py-6" x-show="error" x-cloak>
+  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+    <p class="text-red-600 text-sm" x-text="error"></p>
     <a href="/" class="mt-3 inline-block text-sm text-blue-600 hover:underline">← Вернуться к списку</a>
   </div>
 </div>
 
-<div class="max-w-6xl mx-auto px-4 py-6 space-y-5 fade-in" x-show="data" x-cloak>
+<div class="max-w-5xl mx-auto px-6 py-6 space-y-4 fade-in" x-show="data" x-cloak>
 
   <!-- Вопрос -->
-  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+  <div class="bg-white rounded-lg border border-gray-200 p-6">
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
-        <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Вопрос сотрудника</p>
-        <p class="text-lg font-semibold text-gray-900" x-text="data?.question"></p>
+        <div class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Вопрос сотрудника</div>
+        <div class="text-lg font-semibold text-gray-900" x-text="data?.question"></div>
       </div>
       <div class="flex flex-col items-end gap-2 flex-shrink-0">
-        <span class="px-3 py-1 rounded-full text-sm font-medium"
-          :class="data?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
-          x-text="data?.escalated ? '⚠️ Эскалация' : '✅ Решено'">
+        <span class="px-3 py-1 rounded text-xs font-medium"
+          :class="data?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'"
+          x-text="data?.escalated ? 'Эскалация' : 'Решено автоматически'">
         </span>
-        <span class="text-xs"
-          :class="data?.source === 'telegram' ? 'text-blue-500' : 'text-gray-400'"
-          x-text="data?.source === 'telegram' ? '📱 Telegram' : '🌐 Web'">
+        <span class="text-xs text-gray-400"
+          x-text="data?.source === 'telegram' ? 'Telegram' : 'Web'">
         </span>
       </div>
     </div>
   </div>
 
-  <!-- Классификация -->
-  <div x-show="data?.classification" class="grid grid-cols-2 gap-3">
-    <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex items-center gap-3">
-      <div class="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center">🗂</div>
-      <div>
-        <div class="text-xs text-gray-400">Категория</div>
-        <div class="font-semibold text-gray-800" x-text="data?.classification?.service || '—'"></div>
+  <!-- Классификация + тайминги -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs text-gray-400 mb-1">Категория</div>
+      <div class="font-medium text-sm text-gray-800" x-text="data?.classification?.service || '—'"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs text-gray-400 mb-1">Приоритет</div>
+      <div class="font-medium text-sm"
+        :class="{
+          'text-red-600': data?.classification?.priority === 'Критичный',
+          'text-orange-500': data?.classification?.priority === 'Высокий',
+          'text-yellow-600': data?.classification?.priority === 'Средний',
+          'text-emerald-600': data?.classification?.priority === 'Низкий',
+        }"
+        x-text="data?.classification?.priority || '—'">
       </div>
     </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex items-center gap-3">
-      <div class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">🎯</div>
-      <div>
-        <div class="text-xs text-gray-400">Приоритет</div>
-        <div class="font-semibold"
-          :class="{
-            'text-red-600': data?.classification?.priority === 'Критичный',
-            'text-orange-500': data?.classification?.priority === 'Высокий',
-            'text-yellow-600': data?.classification?.priority === 'Средний',
-            'text-green-600': data?.classification?.priority === 'Низкий',
-          }"
-          x-text="data?.classification?.priority || '—'">
-        </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs text-gray-400 mb-1">Общее время</div>
+      <div class="font-semibold text-sm text-blue-600" x-text="data?.timing?.total_ms + ' мс'"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs text-gray-400 mb-1">Статус</div>
+      <div class="font-medium text-sm"
+        :class="data?.escalated ? 'text-orange-500' : 'text-emerald-600'"
+        x-text="data?.escalated ? 'Нужен оператор' : 'Автоответ'">
       </div>
-    </div>
-  </div>
-
-  <!-- Тайминги -->
-  <div class="grid grid-cols-3 gap-3">
-    <div class="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
-      <div class="text-3xl font-bold text-blue-600" x-text="data?.timing?.total_ms + ' мс'"></div>
-      <div class="text-xs text-gray-500 mt-1">Общее время</div>
-    </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
-      <div class="text-3xl font-bold text-purple-600" x-text="data?.timing?.search_ms + ' мс'"></div>
-      <div class="text-xs text-gray-500 mt-1">Поиск (ChromaDB)</div>
-    </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
-      <div class="text-3xl font-bold text-indigo-600" x-text="data?.timing?.llm_ms + ' мс'"></div>
-      <div class="text-xs text-gray-500 mt-1">YandexGPT</div>
     </div>
   </div>
 
   <!-- Ответ -->
-  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-    <h2 class="font-semibold text-gray-800 mb-3">💬 Ответ бота</h2>
-    <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 leading-relaxed" x-text="data?.answer"></div>
+  <div class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="text-sm font-medium text-gray-700 mb-3">Ответ модели</div>
+    <div class="bg-slate-50 rounded-md border border-gray-100 p-4 text-sm text-gray-700 leading-relaxed" x-text="data?.answer"></div>
   </div>
 
   <!-- Распределение времени -->
-  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-    <h2 class="font-semibold text-gray-800 mb-4">⏱ Распределение времени</h2>
-    <div class="flex rounded-full overflow-hidden h-8 text-xs font-medium">
-      <div class="flex items-center justify-center text-white bg-purple-500 transition-all"
-        :style="`width:${Math.round((data?.timing?.search_ms / data?.timing?.total_ms)*100)}%`"
-        x-text="`Поиск ${data?.timing?.search_ms}мс`">
+  <div class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="text-sm font-medium text-gray-700 mb-4">Распределение времени обработки</div>
+    <div class="flex rounded-md overflow-hidden h-6">
+      <div class="bg-violet-500 transition-all"
+        :style="`width:${Math.round((data?.timing?.search_ms / data?.timing?.total_ms)*100)}%`">
       </div>
-      <div class="flex items-center justify-center text-white bg-indigo-500 transition-all"
-        :style="`width:${Math.round((data?.timing?.llm_ms / data?.timing?.total_ms)*100)}%`"
-        x-text="`LLM ${data?.timing?.llm_ms}мс`">
+      <div class="bg-indigo-500 transition-all"
+        :style="`width:${Math.round((data?.timing?.llm_ms / data?.timing?.total_ms)*100)}%`">
       </div>
     </div>
-    <div class="flex gap-4 mt-2 text-xs text-gray-500">
-      <span><span class="inline-block w-2 h-2 rounded-sm bg-purple-500 mr-1"></span>Поиск ChromaDB</span>
-      <span><span class="inline-block w-2 h-2 rounded-sm bg-indigo-500 mr-1"></span>YandexGPT</span>
+    <div class="flex gap-6 mt-3 text-xs text-gray-500">
+      <span class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-sm bg-violet-500 flex-shrink-0"></span>
+        Поиск ChromaDB — <strong x-text="data?.timing?.search_ms + ' мс'"></strong>
+      </span>
+      <span class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-sm bg-indigo-500 flex-shrink-0"></span>
+        YandexGPT — <strong x-text="data?.timing?.llm_ms + ' мс'"></strong>
+      </span>
+      <span class="text-gray-400">
+        Итого: <strong class="text-gray-600" x-text="data?.timing?.total_ms + ' мс'"></strong>
+      </span>
     </div>
   </div>
 
-  <!-- Чанки -->
-  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+  <!-- Фрагменты -->
+  <div class="bg-white rounded-lg border border-gray-200 p-6">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="font-semibold text-gray-800">🔍 Найденные фрагменты</h2>
-      <div class="flex gap-3 text-xs text-gray-500">
-        <span><span class="inline-block w-2 h-2 rounded-full bg-purple-400 mr-1"></span>KB-статья</span>
-        <span><span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>Решение</span>
-        <span><span class="inline-block w-2 h-2 rounded-full bg-cyan-400 mr-1"></span>Тикет</span>
+      <div class="text-sm font-medium text-gray-700">Найденные фрагменты</div>
+      <div class="flex gap-4 text-xs text-gray-400">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400"></span>KB-статья</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Решение</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span>Тикет</span>
       </div>
     </div>
 
-    <div class="space-y-3">
+    <div class="space-y-2">
       <template x-for="chunk in data?.chunks" :key="chunk.rank">
-        <div class="border rounded-lg overflow-hidden"
+        <div class="border rounded-md overflow-hidden"
           :class="chunk.rank === 1 ? 'border-blue-200' : 'border-gray-100'">
 
-          <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
+          <div class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
             :class="chunk.rank === 1 ? 'bg-blue-50' : 'bg-white'"
             @click="chunk.expanded = !chunk.expanded">
 
-            <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-              :class="chunk.rank === 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'"
-              x-text="chunk.rank">
-            </div>
+            <span class="text-xs font-bold text-gray-400 w-4 flex-shrink-0" x-text="chunk.rank"></span>
 
-            <span class="text-xs px-2 py-0.5 rounded font-medium flex-shrink-0"
-              :class="chunk.source === 'kb' ? 'bg-purple-100 text-purple-700' :
-                      chunk.source === 'expense' ? 'bg-amber-100 text-amber-700' :
-                      'bg-cyan-100 text-cyan-700'"
-              x-text="chunk.source === 'kb' ? 'KB-статья' :
-                      chunk.source === 'expense' ? 'Решение' : 'Тикет'">
+            <span class="text-xs px-2 py-0.5 rounded font-medium border flex-shrink-0"
+              :class="chunk.source === 'kb' ? 'border-violet-200 bg-violet-50 text-violet-700' :
+                      chunk.source === 'expense' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                      'border-cyan-200 bg-cyan-50 text-cyan-700'"
+              x-text="chunk.source === 'kb' ? 'KB-статья' : chunk.source === 'expense' ? 'Решение' : 'Тикет'">
             </span>
 
             <span class="text-sm text-gray-700 flex-1 truncate" x-text="chunk.title || '(без заголовка)'"></span>
 
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <div class="w-28 bg-gray-200 rounded-full h-2">
-                <div class="h-2 rounded-full transition-all duration-500"
-                  :class="chunk.score > 0.7 ? 'bg-green-500' : chunk.score > 0.5 ? 'bg-yellow-400' : 'bg-red-400'"
-                  :style="'width:' + (chunk.score * 100) + '%'">
-                </div>
-              </div>
-              <span class="text-sm font-bold font-mono w-12 text-right"
-                :class="chunk.score > 0.7 ? 'text-green-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
-                x-text="(chunk.score * 100).toFixed(1) + '%'">
-              </span>
-              <svg class="w-4 h-4 text-gray-400 transition-transform"
-                :class="chunk.expanded ? 'rotate-180' : ''"
-                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-              </svg>
-            </div>
+            <span class="text-sm font-semibold font-mono flex-shrink-0"
+              :class="chunk.score > 0.7 ? 'text-emerald-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
+              x-text="(chunk.score * 100).toFixed(1) + '%'">
+            </span>
+
+            <svg class="w-4 h-4 text-gray-400 transition-transform flex-shrink-0"
+              :class="chunk.expanded ? 'rotate-180' : ''"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
           </div>
 
           <div x-show="chunk.expanded" x-cloak class="border-t border-gray-100 px-4 py-4 bg-white">
