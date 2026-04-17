@@ -78,10 +78,15 @@
 - [ ] **7. Проверить полный RAG-цикл (LLM)**
   ```bash
   python -c "
-  from src.rag.llm import ask
-  print(ask('Не подключается удаленка, что делать?'))
+  from src.rag.llm import ask_full
+  r = ask_full('Не подключается удаленка, что делать?')
+  print(r['answer'])
+  print('Эскалация:', r['escalated'])
+  print('Классификация:', r['classification'])
   "
   ```
+  ⚠️ Используй `ask_full()` — возвращает dict с answer/escalated/classification/top_source.
+  Старый `ask()` тоже работает и возвращает (str, bool) — совместимость сохранена.
   → Verify: ответ на русском, по делу, ≤30 сек
 
 - [ ] **8. (Если время есть) Улучшить индексацию**

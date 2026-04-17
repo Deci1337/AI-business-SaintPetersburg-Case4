@@ -18,6 +18,15 @@ SYSTEM_PROMPT = """Ты — ИИ-помощник сервис-деска ком
 Если ответа в контексте нет — честно скажи, что не знаешь, и предложи обратиться к специалисту.
 Отвечай кратко и по делу. Язык — русский."""
 
+CLASSIFY_PROMPT = """На основе вопроса пользователя определи:
+1. Категорию сервиса (одно из: IT-инфраструктура, 1С и ERP, Сеть и VPN, Оргтехника, Почта, Доступ и права, Другое)
+2. Приоритет (одно из: Критичный, Высокий, Средний, Низкий)
+
+Ответь строго в формате:
+Сервис: <категория>
+Приоритет: <приоритет>
+
+Вопрос: {query}"""
 
 FALLBACK = (
     "Не нашёл точного ответа в базе знаний. "
@@ -25,23 +34,10 @@ FALLBACK = (
 )
 
 
-def ask(user_query: str) -> tuple[str, bool]:
-    """Возвращает (ответ, escalated)."""
-    results = search(user_query, n_results=6)
-    if not results or results[0]["score"] < 0.4:
-        return FALLBACK, True
-
-    context = format_context(results)
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
-    ]
-
+def _call_llm(messages: list) -> str:
     extra = {}
     if FOLDER_ID:
         extra["extra_headers"] = {"x-folder-id": FOLDER_ID}
-
     response = client.chat.completions.create(
         model=MODEL,
         messages=messages,
@@ -49,7 +45,75 @@ def ask(user_query: str) -> tuple[str, bool]:
         temperature=0.1,
         **extra,
     )
+    return response.choices[0].message.content.strip()
 
-    answer = response.choices[0].message.content.strip()
+
+def classify(user_query: str) -> dict:
+    """Классифицирует заявку — возвращает {service, priority}."""
+    try:
+        text = _call_llm([
+            {"role": "user", "content": CLASSIFY_PROMPT.format(query=user_query)}
+        ])
+        result = {}
+        for line in text.splitlines():
+            if line.startswith("Сервис:"):
+                result["service"] = line.split(":", 1)[1].strip()
+            elif line.startswith("Приоритет:"):
+                result["priority"] = line.split(":", 1)[1].strip()
+        return result
+    except Exception:
+        return {"service": "Другое", "priority": "Средний"}
+
+
+def ask(user_query: str) -> tuple[str, bool]:
+    """Возвращает (ответ, escalated).
+    Dev A: если нужна совместимость — используй ask_full() для полного результата.
+    """
+    results = search(user_query, n_results=6)
+    if not results or results[0]["score"] < 0.4:
+        return FALLBACK, True
+
+    context = format_context(results)
+    answer = _call_llm([
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
+    ])
+
     escalated = results[0]["score"] < 0.55 or "не знаю" in answer.lower()
     return answer, escalated
+
+
+def ask_full(user_query: str) -> dict:
+    """Полный результат: ответ + эскалация + классификация + топ-чанки."""
+    results = search(user_query, n_results=6)
+
+    if not results or results[0]["score"] < 0.4:
+        return {
+            "answer": FALLBACK,
+            "escalated": True,
+            "classification": {"service": "Другое", "priority": "Средний"},
+            "top_source": None,
+        }
+
+    context = format_context(results)
+    answer = _call_llm([
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
+    ])
+
+    classification = classify(user_query)
+    escalated = results[0]["score"] < 0.55 or "не знаю" in answer.lower()
+
+    top = results[0]
+    top_source = {
+        "title": top["meta"].get("title", ""),
+        "source": top["meta"].get("source", ""),
+        "score": round(top["score"], 3),
+    }
+
+    return {
+        "answer": answer,
+        "escalated": escalated,
+        "classification": classification,
+        "top_source": top_source,
+    }

@@ -5,9 +5,9 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from src.rag.llm import ask
+from src.rag.llm import ask_full
 from src.rag.retriever import search
 
 app = FastAPI(title="BaltBereg Service Desk API", version="1.0.0")
@@ -19,7 +19,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory хранилище (LRU, макс 1000 записей)
 analyses: OrderedDict = OrderedDict()
 MAX_ANALYSES = 1000
 
@@ -34,7 +33,7 @@ def save_analysis(data: dict) -> str:
 
 class Query(BaseModel):
     question: str
-    source: str = "api"  # "api" | "telegram"
+    source: str = "api"
 
 
 @app.post("/ask")
@@ -44,14 +43,16 @@ def ask_endpoint(q: Query):
     search_ms = round((time.time() - t0) * 1000)
 
     t1 = time.time()
-    answer, escalated = ask(q.question)
+    result = ask_full(q.question)
     llm_ms = round((time.time() - t1) * 1000)
     total_ms = round((time.time() - t0) * 1000)
 
     data = {
         "question": q.question,
-        "answer": answer,
-        "escalated": escalated,
+        "answer": result["answer"],
+        "escalated": result["escalated"],
+        "classification": result["classification"],
+        "top_source": result["top_source"],
         "source": q.source,
         "created_at": datetime.now().isoformat(),
         "timing": {
@@ -88,6 +89,7 @@ def list_analyses():
             "total_ms": d["timing"]["total_ms"],
             "created_at": d["created_at"],
             "source": d.get("source", "api"),
+            "classification": d.get("classification", {}),
         }
         for aid, d in reversed(list(analyses.items()))
     ]
@@ -100,14 +102,49 @@ def get_analysis(aid: str):
     return analyses[aid]
 
 
-@app.get("/analysis/{aid}", response_class=HTMLResponse)
-def analysis_page(aid: str):
-    return FileResponse("src/web/analysis.html")
+@app.get("/stats")
+def get_stats():
+    total = len(analyses)
+    if total == 0:
+        return {"total": 0}
+
+    escalated = sum(1 for d in analyses.values() if d["escalated"])
+    timings = [d["timing"]["total_ms"] for d in analyses.values()]
+    sources = {}
+    priorities = {}
+    for d in analyses.values():
+        cl = d.get("classification", {})
+        svc = cl.get("service", "Другое")
+        pri = cl.get("priority", "Средний")
+        sources[svc] = sources.get(svc, 0) + 1
+        priorities[pri] = priorities.get(pri, 0) + 1
+
+    return {
+        "total": total,
+        "escalated": escalated,
+        "resolved": total - escalated,
+        "escalation_rate": round(escalated / total * 100, 1),
+        "automation_rate": round((total - escalated) / total * 100, 1),
+        "avg_ms": round(sum(timings) / len(timings)),
+        "min_ms": min(timings),
+        "max_ms": max(timings),
+        "by_service": sources,
+        "by_priority": priorities,
+        "sources": {
+            "telegram": sum(1 for d in analyses.values() if d.get("source") == "telegram"),
+            "api": sum(1 for d in analyses.values() if d.get("source") != "telegram"),
+        },
+    }
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/analysis/{aid}")
+def analysis_page(aid: str):
+    return FileResponse("src/web/analysis.html")
 
 
 app.mount("/static", StaticFiles(directory="src/web"), name="static")
