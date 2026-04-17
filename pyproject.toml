@@ -1,0 +1,13 @@
+[project]
+name = "baltiyskiy-bereg-starter"
+version = "0.1.0"
+description = "Baltiyskiy Bereg service-desk chatbot starter — AI Business SPB Hackathon 2026"
+requires-python = ">=3.11"
+dependencies = [
+    "pymssql>=2.3",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

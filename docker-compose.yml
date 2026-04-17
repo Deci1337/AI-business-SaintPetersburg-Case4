@@ -1,33 +1,31 @@
 services:
   mssql:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2019-CU18-ubuntu-20.04
     container_name: mssql-baltbereg
+    restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env}"
+      MSSQL_PID: "Developer"
     ports:
       - "1433:1433"
     volumes:
-      - ./data:/var/opt/mssql/backup
-      - mssql_data:/var/opt/mssql/data
+      - mssql-data:/var/opt/mssql
+      - ./data/cleaned.bak:/var/opt/mssql/backup/cleaned.bak:ro
+      - ./restore-db.sh:/usr/local/bin/restore-db.sh:ro
+    entrypoint: /bin/bash
+    command: >
+      -c "
+      /opt/mssql/bin/sqlservr &
+      /usr/local/bin/restore-db.sh &
+      wait
+      "
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "SA", "-P", "${MSSQL_SA_PASSWORD}", "-Q", "SELECT 1", "-No"]
-      interval: 10s
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P $${MSSQL_SA_PASSWORD} -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 15s
       timeout: 5s
       retries: 10
-
-  app:
-    build: .
-    container_name: baltbereg-bot
-    env_file: .env
-    depends_on:
-      mssql:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./src:/app/src
-      - ./data:/app/data
+      start_period: 30s
 
 volumes:
-  mssql_data:
+  mssql-data:

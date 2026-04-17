@@ -6,9 +6,9 @@ load_dotenv()
 
 CONN_STR = (
     "DRIVER={ODBC Driver 18 for SQL Server};"
-    "SERVER=localhost,1433;"
-    f"DATABASE={os.getenv('MSSQL_DB', 'service_desk_tdbb')};"
-    f"UID=SA;PWD={os.getenv('MSSQL_SA_PASSWORD')};"
+    f"SERVER={os.getenv('MSSQL_HOST', 'localhost')},{os.getenv('MSSQL_PORT', '1433')};"
+    f"DATABASE={os.getenv('MSSQL_DATABASE', 'service_desk_tdbb')};"
+    f"UID={os.getenv('MSSQL_USER', 'SA')};PWD={os.getenv('MSSQL_SA_PASSWORD')};"
     "TrustServerCertificate=yes;"
 )
 

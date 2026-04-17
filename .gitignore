@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+.ipynb_checkpoints/
+data/*
+!data/.gitkeep
+*.zip
+conversation.jsonl
+.DS_Store
+dist/
+build/
+*.egg-info/
