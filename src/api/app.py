@@ -1,14 +1,23 @@
+import logging
+import os
 import time
+import traceback
 import uuid
 from collections import OrderedDict
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from src.rag.llm import ask_full
 from src.rag.retriever import search
+
+load_dotenv()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("baltbereg.api")
+PUBLIC_URL = os.getenv("API_PUBLIC_URL", "http://localhost:8001")
 
 app = FastAPI(title="BaltBereg Service Desk API", version="1.0.0")
 
@@ -18,6 +27,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    log.error("Unhandled %s on %s: %s\n%s", type(exc).__name__, request.url.path, exc, traceback.format_exc())
+    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
 
 analyses: OrderedDict = OrderedDict()
 MAX_ANALYSES = 1000
@@ -75,7 +90,7 @@ def ask_endpoint(q: Query):
 
     aid = save_analysis(data)
     data["analysis_id"] = aid
-    data["analysis_url"] = f"http://localhost:8000/analysis/{aid}"
+    data["analysis_url"] = f"{PUBLIC_URL}/analysis/{aid}"
     return data
 
 

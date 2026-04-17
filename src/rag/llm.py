@@ -1,5 +1,6 @@
 import os
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from .retriever import search, format_context
 
@@ -11,9 +12,10 @@ MODEL = os.getenv("YANDEX_GPT_MODEL", "yandexgpt/latest")
 COMPLETION_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
 SYSTEM_PROMPT = """Ты — ИИ-помощник сервис-деска компании «Балтийский Берег».
-Отвечай только на основе предоставленного контекста из базы знаний и истории тикетов.
-Если ответа в контексте нет — честно скажи, что не знаешь, и предложи обратиться к специалисту.
-Отвечай кратко и по делу. Язык — русский."""
+Используй предоставленный контекст из базы знаний и истории тикетов как основной источник.
+Если контекст содержит похожие случаи — опирайся на них и давай практические рекомендации.
+Если контекст не покрывает вопрос полностью — дай общие шаги диагностики для IT-проблемы и предложи создать заявку.
+Никогда не говори «не знаю» без попытки помочь. Отвечай кратко, по пунктам, на русском языке."""
 
 CLASSIFY_PROMPT = """На основе вопроса пользователя определи:
 1. Категорию сервиса (одно из: IT-инфраструктура, 1С и ERP, Сеть и VPN, Оргтехника, Почта, Доступ и права, Другое)
@@ -31,7 +33,7 @@ FALLBACK = (
 )
 
 
-def _call_llm(messages: list) -> str:
+def _call_llm(messages: list, retries: int = 3) -> str:
     payload = {
         "modelUri": f"gpt://{FOLDER_ID}/{MODEL}",
         "completionOptions": {"stream": False, "temperature": 0.1, "maxTokens": 1024},
@@ -40,31 +42,51 @@ def _call_llm(messages: list) -> str:
             for m in messages
         ],
     }
-    r = requests.post(
-        COMPLETION_URL,
-        json=payload,
-        headers={"Authorization": f"Api-Key {API_KEY}", "x-folder-id": FOLDER_ID},
-        timeout=60,
-    )
-    r.raise_for_status()
-    return r.json()["result"]["alternatives"][0]["message"]["text"].strip()
+    last_err = None
+    for attempt in range(retries):
+        try:
+            r = requests.post(
+                COMPLETION_URL,
+                json=payload,
+                headers={"Authorization": f"Api-Key {API_KEY}", "x-folder-id": FOLDER_ID},
+                timeout=30,
+            )
+            r.raise_for_status()
+            return r.json()["result"]["alternatives"][0]["message"]["text"].strip()
+        except Exception as e:
+            last_err = e
+    raise last_err
+
+
+_SERVICE_RULES = [
+    ("1С и ERP",        ["1с", "erp", "инфобух", "бухгалт", "отчёт", "отчет", "зарплат", "проводк"]),
+    ("Сеть и VPN",      ["vpn", "впн", "сеть", "интернет", "связь", "wifi", "wi-fi", "ethernet", "удалённый", "удаленный", "l2tp", "openvpn"]),
+    ("IT-инфраструктура", ["сервер", "компьютер", "пк", "ноутбук", "windows", "драйвер", "установ", "обновлен"]),
+    ("Почта",           ["почта", "email", "outlook", "письм", "ящик"]),
+    ("Оргтехника",      ["принтер", "сканер", "мфу", "картридж", "копир"]),
+    ("Доступ и права",  ["доступ", "права", "пароль", "учётная", "учетная", "заблокир", "active directory", "ad"]),
+]
+_PRIORITY_RULES = [
+    ("Критичный",  ["не работает", "не подключается", "упал", "критич", "срочно", "всё стоит", "все стоит"]),
+    ("Высокий",    ["не открывается", "ошибка", "проблема", "медленно", "завис"]),
+    ("Низкий",     ["вопрос", "как настроить", "подскажите", "узнать"]),
+]
 
 
 def classify(user_query: str) -> dict:
-    """Классифицирует заявку — возвращает {service, priority}."""
-    try:
-        text = _call_llm([
-            {"role": "user", "content": CLASSIFY_PROMPT.format(query=user_query)}
-        ])
-        result = {}
-        for line in text.splitlines():
-            if line.startswith("Сервис:"):
-                result["service"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Приоритет:"):
-                result["priority"] = line.split(":", 1)[1].strip()
-        return result
-    except Exception:
-        return {"service": "Другое", "priority": "Средний"}
+    """Классифицирует заявку по ключевым словам — без LLM-вызова."""
+    q = user_query.lower()
+    service = "Другое"
+    for svc, keywords in _SERVICE_RULES:
+        if any(kw in q for kw in keywords):
+            service = svc
+            break
+    priority = "Средний"
+    for pri, keywords in _PRIORITY_RULES:
+        if any(kw in q for kw in keywords):
+            priority = pri
+            break
+    return {"service": service, "priority": priority}
 
 
 def ask(user_query: str) -> tuple[str, bool]:
@@ -79,7 +101,7 @@ def ask(user_query: str) -> tuple[str, bool]:
         {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
     ])
 
-    escalated = results[0]["score"] < 0.55 or "не знаю" in answer.lower()
+    escalated = results[0]["score"] < 0.45 or "не знаю" in answer.lower()
     return answer, escalated
 
 
@@ -100,9 +122,8 @@ def ask_full(user_query: str) -> dict:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
     ])
-
     classification = classify(user_query)
-    escalated = results[0]["score"] < 0.55 or "не знаю" in answer.lower()
+    escalated = results[0]["score"] < 0.45 or "не знаю" in answer.lower()
 
     top = results[0]
     top_source = {

@@ -4,12 +4,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def _pick_driver() -> str:
+    explicit = os.getenv("MSSQL_ODBC_DRIVER")
+    if explicit:
+        return explicit
+    try:
+        drivers = pyodbc.drivers()
+    except Exception:
+        drivers = []
+    for candidate in ("ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"):
+        if candidate in drivers:
+            return candidate
+    return "ODBC Driver 17 for SQL Server"
+
+
 CONN_STR = (
-    "DRIVER={ODBC Driver 18 for SQL Server};"
+    f"DRIVER={{{_pick_driver()}}};"
     f"SERVER={os.getenv('MSSQL_HOST', 'localhost')},{os.getenv('MSSQL_PORT', '1433')};"
     f"DATABASE={os.getenv('MSSQL_DATABASE', 'service_desk_tdbb')};"
     f"UID={os.getenv('MSSQL_USER', 'SA')};PWD={os.getenv('MSSQL_SA_PASSWORD')};"
-    "TrustServerCertificate=yes;"
+    "TrustServerCertificate=yes;Encrypt=no;"
 )
 
 
