@@ -1,4 +1,5 @@
 import csv
+import json
 import logging
 import os
 import time
@@ -233,6 +234,16 @@ def save_rating(r: Rating):
             r.question[:200], r.answer[:200],
         ])
     return {"ok": True}
+
+
+@app.get("/weights")
+def get_weights():
+    path = "data/weights.json"
+    defaults = {"1": -2, "2": -1, "3": 0, "4": 1, "5": 2}
+    if not os.path.exists(path):
+        return defaults
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
 
 @app.get("/ratings/stats")

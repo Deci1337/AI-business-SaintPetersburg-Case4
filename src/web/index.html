@@ -291,6 +291,46 @@
       <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Распределение оценок</div>
       <canvas id="ratingsChart" height="80"></canvas>
     </div>
+
+    <!-- Веса модели -->
+    <div class="mt-6 border-t border-gray-100 pt-5">
+      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Изменение весов модели</div>
+      <div class="text-xs text-gray-400 mb-4">Накопленный эффект оценок операторов на приоритеты источников RAG</div>
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div class="rounded-lg p-4 border flex items-center gap-3"
+          :class="modelWeightDelta() > 0 ? 'border-emerald-200 bg-emerald-50' : modelWeightDelta() < 0 ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'">
+          <div class="text-3xl font-bold"
+            :class="modelWeightDelta() > 0 ? 'text-emerald-600' : modelWeightDelta() < 0 ? 'text-red-500' : 'text-gray-400'"
+            x-text="(modelWeightDelta() > 0 ? '+' : '') + modelWeightDelta().toFixed(1) + '%'">
+          </div>
+          <div>
+            <div class="text-xs font-medium text-gray-700">Суммарное изменение весов</div>
+            <div class="text-xs text-gray-400 mt-0.5"
+              x-text="modelWeightDelta() > 0 ? 'Модель дообучилась в лучшую сторону' : modelWeightDelta() < 0 ? 'Требуется доработка источников' : 'Нейтральные оценки'">
+            </div>
+          </div>
+        </div>
+        <div class="rounded-lg p-4 border border-gray-100 bg-gray-50">
+          <div class="text-xs font-medium text-gray-600 mb-2">Расшифровка по оценкам</div>
+          <div class="space-y-1 text-xs text-gray-500">
+            <template x-for="s in [5,4,3,2,1]" :key="s">
+              <div class="flex justify-between">
+                <span>
+                  <span x-text="'⭐'.repeat(s) + ' (×'"></span><span x-text="ratingsStats?.distribution?.[s] || ratingsStats?.distribution?.[String(s)] || 0"></span><span>)</span>
+                </span>
+                <span class="font-mono"
+                  :class="weightFor(s) > 0 ? 'text-emerald-600' : weightFor(s) < 0 ? 'text-red-500' : 'text-gray-400'"
+                  x-text="weightLabel(s) + ' за оценку'">
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700"
+        x-text="modelWeightTrendLabel()">
+      </div>
+    </div>
   </div>
 
   <!-- Список запросов -->
@@ -360,6 +400,7 @@ function ragInspector() {
     stats: null,
     dbStats: null,
     ratingsStats: null,
+    weights: {"1":-2,"2":-1,"3":0,"4":1,"5":2},
     charts: {},
     quickQuestions: [
       'Не подключается VPN',
@@ -407,12 +448,14 @@ function ragInspector() {
 
     async loadRatings() {
       try {
-        const r = await fetch('/ratings/stats');
-        if (!r.ok) return;
-        this.ratingsStats = await r.json();
-        if (this.ratingsStats?.total > 0) {
-          this.$nextTick(() => this.renderRatingsChart('ratingsChart', this.ratingsStats.distribution));
+        const [rr, rw] = await Promise.all([fetch('/ratings/stats'), fetch('/weights')]);
+        if (rr.ok) {
+          this.ratingsStats = await rr.json();
+          if (this.ratingsStats?.total > 0) {
+            this.$nextTick(() => this.renderRatingsChart('ratingsChart', this.ratingsStats.distribution));
+          }
         }
+        if (rw.ok) this.weights = await rw.json();
       } catch {}
     },
 
@@ -485,6 +528,32 @@ function ragInspector() {
         data: { labels, datasets: [{ data: labels.map(l => dist[l] || 0), backgroundColor: colors, borderRadius: 3 }] },
         options: { ...CHART_DEFAULTS, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
       });
+    },
+
+    modelWeightDelta() {
+      const d = this.ratingsStats?.distribution;
+      if (!d) return 0;
+      const w = this.weights;
+      return [1,2,3,4,5].reduce((sum, s) => sum + (d[s]||0) * (w[s]||0), 0);
+    },
+
+    weightFor(score) {
+      return this.weights[score] ?? this.weights[String(score)] ?? 0;
+    },
+
+    weightLabel(score) {
+      const v = this.weightFor(score);
+      return (v > 0 ? '+' : '') + v + '%';
+    },
+
+    modelWeightTrendLabel() {
+      const delta = this.modelWeightDelta();
+      const avg = this.ratingsStats?.avg_score || 0;
+      if (delta > 10) return `📈 Модель уверенно дообучилась: суммарный прирост +${delta.toFixed(0)}%. Источники с высокими оценками получили повышенный приоритет при поиске.`;
+      if (delta > 0) return `📈 Положительная динамика (+${delta.toFixed(0)}%). Модель корректирует веса источников в пользу релевантных ответов.`;
+      if (delta === 0) return `➡️ Нейтральный баланс. Оценки не изменили приоритеты источников — модель работает в штатном режиме.`;
+      if (delta > -10) return `📉 Небольшое снижение (${delta.toFixed(0)}%). Часть источников помечена как ненадёжные, приоритет снижен.`;
+      return `📉 Значительное снижение (${delta.toFixed(0)}%). Источники по проблемным темам требуют пересмотра и дополнения базы знаний.`;
     },
 
     async submit() {

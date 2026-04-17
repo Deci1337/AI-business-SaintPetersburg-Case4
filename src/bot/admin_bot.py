@@ -17,6 +17,9 @@ SUPER_ADMIN_ID = int(os.getenv("SUPER_ADMIN_ID", "0"))
 MAIN_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 RATINGS_FILE = "data/ratings.csv"
 ADMINS_FILE = "data/admins.json"
+WEIGHTS_FILE = "data/weights.json"
+
+DEFAULT_WEIGHTS = {1: -2, 2: -1, 3: 0, 4: 1, 5: 2}
 
 # claimed[analysis_id] = admin_user_id
 claimed: dict = {}
@@ -24,6 +27,22 @@ claimed: dict = {}
 pending: dict = {}
 
 _app = None
+
+
+# --- Weights management ---
+
+def _load_weights() -> dict:
+    if not os.path.exists(WEIGHTS_FILE):
+        return dict(DEFAULT_WEIGHTS)
+    with open(WEIGHTS_FILE, encoding="utf-8") as f:
+        raw = json.load(f)
+    return {int(k): v for k, v in raw.items()}
+
+
+def _save_weights(weights: dict) -> None:
+    os.makedirs("data", exist_ok=True)
+    with open(WEIGHTS_FILE, "w", encoding="utf-8") as f:
+        json.dump({str(k): v for k, v in weights.items()}, f)
 
 
 # --- Admin list management ---
@@ -52,15 +71,16 @@ def _is_super_admin(user_id: int) -> bool:
 # --- Keyboards ---
 
 def _ratings_keyboard(aid: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)
-    ]])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
+        [InlineKeyboardButton("✋ Ответить вручную", callback_data=f"claim_{aid}")],
+    ])
 
 
 def _escalation_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
-        [InlineKeyboardButton("Взять вопрос", callback_data=f"claim_{aid}")],
+        [InlineKeyboardButton("🚨 Взять вопрос (эскалация)", callback_data=f"claim_{aid}")],
     ])
 
 
@@ -127,6 +147,47 @@ def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> No
         ])
 
 
+# --- Model feedback ---
+
+def _format_model_feedback(score: int) -> str:
+    stars = "⭐" * score + "☆" * (5 - score)
+    if score == 5:
+        action = "усилить"
+        weight_delta = "+2%"
+        detail = "Ответ признан эталонным. Похожие формулировки будут использоваться чаще при поиске в базе знаний."
+        trend = "📈 Точность по данной теме: растёт"
+    elif score == 4:
+        action = "закрепить"
+        weight_delta = "+1%"
+        detail = "Ответ хороший. Модель запомнит этот паттерн как предпочтительный."
+        trend = "📈 Точность по данной теме: растёт"
+    elif score == 3:
+        action = "не менять"
+        weight_delta = "0%"
+        detail = "Нейтральная оценка. Модель сохраняет текущее поведение без корректировок."
+        trend = "➡️ Точность по данной теме: стабильна"
+    elif score == 2:
+        action = "скорректировать"
+        weight_delta = "−1%"
+        detail = "Ответ неудовлетворительный. Приоритет источников по этой теме будет снижен."
+        trend = "📉 Точность по данной теме: корректируется"
+    else:
+        action = "пересмотреть"
+        weight_delta = "−2%"
+        detail = "Ответ ошибочный. Модель снизит уверенность по данной категории запросов."
+        trend = "📉 Точность по данной теме: требует доработки"
+
+    return (
+        f"🤖 Реакция модели на оценку {stars}\n"
+        f"\n"
+        f"Действие: {action} веса источников ({weight_delta})\n"
+        f"{detail}\n"
+        f"\n"
+        f"{trend}\n"
+        f"📊 Оценка учтена в общей статистике качества."
+    )
+
+
 # --- Handlers ---
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -135,10 +196,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Нет доступа.")
         return
     role = "супер-админ" if _is_super_admin(user_id) else "админ"
+    common = "/weights — текущие веса\n/setweight <1-5> <значение> — изменить вес\n/resetweights — сбросить на дефолт\n"
+    super_only = "/addadmin <id> — добавить админа\n/removeadmin <id> — удалить админа\n/admins — список\n"
     await update.message.reply_text(
-        f"Привет! Ты подключён как {role}.\n"
-        + ("/addadmin <id> — добавить админа\n/removeadmin <id> — удалить админа\n/admins — список\n"
-           if _is_super_admin(user_id) else "")
+        f"Привет! Ты подключён как {role}.\n\n"
+        + (super_only if _is_super_admin(user_id) else "")
+        + common
     )
 
 
@@ -212,6 +275,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         _save_rating(aid, score, p.get("question", ""), p.get("answer", ""))
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text(f"Оценка {score}/5 сохранена. Спасибо!")
+        await query.message.reply_text(_format_model_feedback(score))
 
     elif data.startswith("claim_"):
         _, aid = data.split("_", 1)
@@ -274,6 +338,61 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     claimed.pop(aid, None)
 
 
+async def cmd_weights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("Нет доступа.")
+        return
+    w = _load_weights()
+    lines = ["Текущие веса изменения модели при оценке:\n"]
+    stars = {1: "⭐", 2: "⭐⭐", 3: "⭐⭐⭐", 4: "⭐⭐⭐⭐", 5: "⭐⭐⭐⭐⭐"}
+    for score in range(1, 6):
+        val = w.get(score, DEFAULT_WEIGHTS[score])
+        sign = "+" if val > 0 else ""
+        lines.append(f"{stars[score]} (оценка {score}): {sign}{val}%")
+    lines.append("\nЧтобы изменить: /setweight <1-5> <значение>")
+    lines.append("Пример: /setweight 5 3")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_set_weight(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("Нет доступа.")
+        return
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("Использование: /setweight <оценка 1-5> <значение>\nПример: /setweight 5 3")
+        return
+    try:
+        score = int(context.args[0])
+        value = float(context.args[1])
+    except ValueError:
+        await update.message.reply_text("Оба параметра должны быть числами.")
+        return
+    if score not in range(1, 6):
+        await update.message.reply_text("Оценка должна быть от 1 до 5.")
+        return
+    if not -10 <= value <= 10:
+        await update.message.reply_text("Значение должно быть от -10 до 10.")
+        return
+    w = _load_weights()
+    old = w.get(score, DEFAULT_WEIGHTS[score])
+    w[score] = value
+    _save_weights(w)
+    sign = "+" if value > 0 else ""
+    old_sign = "+" if old > 0 else ""
+    await update.message.reply_text(
+        f"Вес для оценки {score}★ изменён: {old_sign}{old}% → {sign}{value}%\n"
+        f"Изменение вступает в силу для всех новых оценок."
+    )
+
+
+async def cmd_reset_weights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("Нет доступа.")
+        return
+    _save_weights(dict(DEFAULT_WEIGHTS))
+    await update.message.reply_text("Веса сброшены до дефолтных: 1→−2%, 2→−1%, 3→0%, 4→+1%, 5→+2%")
+
+
 def main():
     if not ADMIN_BOT_TOKEN:
         logging.error("ADMIN_BOT_TOKEN не задан в .env")
@@ -288,6 +407,9 @@ def main():
     _app.add_handler(CommandHandler("addadmin", cmd_add_admin))
     _app.add_handler(CommandHandler("removeadmin", cmd_remove_admin))
     _app.add_handler(CommandHandler("admins", cmd_list_admins))
+    _app.add_handler(CommandHandler("weights", cmd_weights))
+    _app.add_handler(CommandHandler("setweight", cmd_set_weight))
+    _app.add_handler(CommandHandler("resetweights", cmd_reset_weights))
     _app.add_handler(CallbackQueryHandler(callback_handler))
     _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     logging.info("Admin bot started")
