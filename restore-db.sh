@@ -5,7 +5,7 @@ set -euo pipefail
 BACKUP_PATH="/var/opt/mssql/backup/cleaned.bak"
 DB_NAME="service_desk_tdbb"
 SA_PASSWORD="${MSSQL_SA_PASSWORD:?}"
-SQLCMD="/opt/mssql-tools/bin/sqlcmd"
+SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
 
 echo "Waiting for SQL Server to start..."
 for i in $(seq 1 60); do

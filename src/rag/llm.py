@@ -1,17 +1,14 @@
 import os
-from openai import OpenAI
+import requests
 from dotenv import load_dotenv
 from .retriever import search, format_context
 
 load_dotenv()
 
-client = OpenAI(
-    api_key=os.getenv("YANDEX_GPT_API_KEY"),
-    base_url=os.getenv("YANDEX_GPT_BASE_URL", "https://llm.api.cloud.yandex.net/foundationModels/v1"),
-)
-
-MODEL = os.getenv("YANDEX_GPT_MODEL", "yandexgpt/latest")
+API_KEY = os.getenv("YANDEX_GPT_API_KEY")
 FOLDER_ID = os.getenv("YANDEX_GPT_FOLDER_ID")
+MODEL = os.getenv("YANDEX_GPT_MODEL", "yandexgpt/latest")
+COMPLETION_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
 SYSTEM_PROMPT = """Ты — ИИ-помощник сервис-деска компании «Балтийский Берег».
 Отвечай только на основе предоставленного контекста из базы знаний и истории тикетов.
@@ -35,17 +32,22 @@ FALLBACK = (
 
 
 def _call_llm(messages: list) -> str:
-    extra = {}
-    if FOLDER_ID:
-        extra["extra_headers"] = {"x-folder-id": FOLDER_ID}
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.1,
-        **extra,
+    payload = {
+        "modelUri": f"gpt://{FOLDER_ID}/{MODEL}",
+        "completionOptions": {"stream": False, "temperature": 0.1, "maxTokens": 1024},
+        "messages": [
+            {"role": m["role"], "text": m.get("content", m.get("text", ""))}
+            for m in messages
+        ],
+    }
+    r = requests.post(
+        COMPLETION_URL,
+        json=payload,
+        headers={"Authorization": f"Api-Key {API_KEY}", "x-folder-id": FOLDER_ID},
+        timeout=60,
     )
-    return response.choices[0].message.content.strip()
+    r.raise_for_status()
+    return r.json()["result"]["alternatives"][0]["message"]["text"].strip()
 
 
 def classify(user_query: str) -> dict:
@@ -66,9 +68,7 @@ def classify(user_query: str) -> dict:
 
 
 def ask(user_query: str) -> tuple[str, bool]:
-    """Возвращает (ответ, escalated).
-    Dev A: если нужна совместимость — используй ask_full() для полного результата.
-    """
+    """Возвращает (ответ, escalated)."""
     results = search(user_query, n_results=6)
     if not results or results[0]["score"] < 0.4:
         return FALLBACK, True

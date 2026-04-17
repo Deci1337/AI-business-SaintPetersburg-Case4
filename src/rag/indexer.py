@@ -42,6 +42,16 @@ def chunk_text(text: str, max_chars: int = 800) -> list[str]:
     return chunks or [text[:max_chars]]
 
 
+def _upsert_batched(col, docs, ids, metas, embeddings, batch_size=5000):
+    for i in range(0, len(docs), batch_size):
+        col.upsert(
+            documents=docs[i:i+batch_size],
+            ids=ids[i:i+batch_size],
+            metadatas=metas[i:i+batch_size],
+            embeddings=embeddings[i:i+batch_size],
+        )
+
+
 def build_index():
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     model = get_model()
@@ -60,7 +70,7 @@ def build_index():
 
     if docs:
         embeddings = model.encode(docs, show_progress_bar=True).tolist()
-        kb_col.upsert(documents=docs, ids=ids, metadatas=metas, embeddings=embeddings)
+        _upsert_batched(kb_col, docs, ids, metas, embeddings)
     print(f"KB: {len(docs)} чанков")
 
     # Тикеты (Comment — главный источник)
@@ -87,7 +97,7 @@ def build_index():
 
     if docs:
         embeddings = model.encode(docs, batch_size=64, show_progress_bar=True).tolist()
-        ticket_col.upsert(documents=docs, ids=ids, metadatas=metas, embeddings=embeddings)
+        _upsert_batched(ticket_col, docs, ids, metas, embeddings)
     print(f"Тикеты: {len(docs)} чанков")
     print("Индекс построен.")
 

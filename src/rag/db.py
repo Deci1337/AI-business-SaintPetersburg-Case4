@@ -24,10 +24,10 @@ def fetch_tickets(limit: int = None) -> list[dict]:
             t.Name,
             t.Description,
             t.Comment,
-            s.Name AS ServiceName,
-            tt.Name AS TaskTypeName,
-            st.Name AS StatusName,
-            p.Name AS PriorityName
+            s.NameXml.value('(/Language/Ru)[1]', 'nvarchar(500)') AS ServiceName,
+            tt.NameXml.value('(/Language/Ru)[1]', 'nvarchar(500)') AS TaskTypeName,
+            st.NameXml.value('(/Language/Ru)[1]', 'nvarchar(500)') AS StatusName,
+            p.NameXml.value('(/Language/Ru)[1]', 'nvarchar(500)') AS PriorityName
         FROM Task t
         LEFT JOIN Service s ON t.ServiceId = s.Id
         LEFT JOIN TaskType tt ON t.TypeId = tt.Id
@@ -49,9 +49,9 @@ def fetch_kb_articles() -> list[dict]:
             d.Id,
             d.Name,
             d.Description,
-            f.Name AS FolderName
+            f.NameXml.value('(/Language/Ru)[1]', 'nvarchar(500)') AS FolderName
         FROM KBDocument d
-        LEFT JOIN KBFolder f ON d.FolderId = f.Id
+        LEFT JOIN KBFolder f ON d.ParentId = f.Id
         WHERE d.IsPublished = 1 AND d.Description IS NOT NULL
     """
     with get_connection() as conn:
