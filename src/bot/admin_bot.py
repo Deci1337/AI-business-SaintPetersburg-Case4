@@ -73,7 +73,6 @@ def _is_super_admin(user_id: int) -> bool:
 def _ratings_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
-        [InlineKeyboardButton("✋ Ответить вручную", callback_data=f"claim_{aid}")],
     ])
 
 
@@ -81,6 +80,13 @@ def _escalation_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
         [InlineKeyboardButton("🚨 Взять вопрос (эскалация)", callback_data=f"claim_{aid}")],
+    ])
+
+
+def _claimed_keyboard(aid: str, admin_name: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
+        [InlineKeyboardButton(f"✅ Взято: @{admin_name}", callback_data="noop")],
     ])
 
 
@@ -287,13 +293,22 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
 
         claimed[aid] = admin_id
-        await query.edit_message_reply_markup(
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)
-            ], [
-                InlineKeyboardButton(f"Взято: @{admin_name}", callback_data="noop"),
-            ]])
-        )
+        new_kb = _claimed_keyboard(aid, admin_name)
+        await query.edit_message_reply_markup(reply_markup=new_kb)
+
+        other_admins = [SUPER_ADMIN_ID] + _load_admins() if SUPER_ADMIN_ID else _load_admins()
+        other_admins = [a for a in other_admins if a != admin_id]
+        if other_admins:
+            bot = Bot(token=ADMIN_BOT_TOKEN)
+            for other_id in other_admins:
+                try:
+                    await bot.send_message(
+                        chat_id=other_id,
+                        text=f"ℹ️ Вопрос #{aid[:8]} взят оператором @{admin_name}.",
+                    )
+                except Exception:
+                    pass
+
         await query.message.reply_text(
             f"Вы взяли вопрос #{aid[:8]}.\n"
             f"Напишите ответ следующим сообщением — он будет переслан пользователю."
@@ -310,6 +325,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     aid = context.user_data.get("pending_reply")
+    logging.info(f"message_handler: admin_id={admin_id}, pending_reply={aid}, user_data={context.user_data}")
     if not aid:
         return
 
