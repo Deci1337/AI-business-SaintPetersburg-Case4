@@ -19,10 +19,17 @@ SYSTEM_PROMPT = """Ты — ИИ-помощник сервис-деска ком
 Отвечай кратко и по делу. Язык — русский."""
 
 
-def ask(user_query: str) -> str:
+FALLBACK = (
+    "Не нашёл точного ответа в базе знаний. "
+    "Рекомендую обратиться к специалисту поддержки или создать заявку в системе."
+)
+
+
+def ask(user_query: str) -> tuple[str, bool]:
+    """Возвращает (ответ, escalated)."""
     results = search(user_query, n_results=6)
-    if not results:
-        return "Не нашёл релевантной информации. Рекомендую обратиться к специалисту поддержки."
+    if not results or results[0]["score"] < 0.4:
+        return FALLBACK, True
 
     context = format_context(results)
 
@@ -43,4 +50,6 @@ def ask(user_query: str) -> str:
         **extra,
     )
 
-    return response.choices[0].message.content.strip()
+    answer = response.choices[0].message.content.strip()
+    escalated = results[0]["score"] < 0.55 or "не знаю" in answer.lower()
+    return answer, escalated

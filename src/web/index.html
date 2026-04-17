@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>БалтБерег — RAG Inspector</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  [x-cloak] { display: none !important; }
+  .score-bar { transition: width 0.6s ease; }
+  .fade-in { animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .chunk-card:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+  .chunk-card { transition: all 0.2s ease; }
+  pre { white-space: pre-wrap; word-break: break-word; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="ragInspector()">
+
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+      <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+      </svg>
+    </div>
+    <div>
+      <h1 class="font-bold text-gray-900 text-lg leading-none">RAG Inspector</h1>
+      <p class="text-xs text-gray-400">Балтийский Берег — Сервис-деск AI</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <div class="w-2 h-2 rounded-full" :class="apiOk ? 'bg-green-400' : 'bg-red-400'"></div>
+    <span class="text-xs text-gray-500" x-text="apiOk ? 'API онлайн' : 'API недоступен'"></span>
+  </div>
+</header>
+
+<div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- Поиск -->
+  <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+    <label class="block text-sm font-medium text-gray-700 mb-2">Задайте вопрос сотрудника</label>
+    <div class="flex gap-3">
+      <input
+        x-model="query"
+        @keydown.enter="submit"
+        type="text"
+        placeholder="Например: не подключается VPN, ошибка в 1С при отчёте..."
+        class="flex-1 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        :disabled="loading"
+      >
+      <button
+        @click="submit"
+        :disabled="loading || !query.trim()"
+        class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 min-w-[120px] justify-center"
+      >
+        <svg x-show="loading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        <span x-text="loading ? 'Думаю...' : 'Спросить'"></span>
+      </button>
+    </div>
+
+    <!-- Быстрые вопросы -->
+    <div class="flex flex-wrap gap-2 mt-3">
+      <span class="text-xs text-gray-400 self-center">Примеры:</span>
+      <template x-for="q in quickQuestions" :key="q">
+        <button
+          @click="query = q; submit()"
+          class="text-xs bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600 px-3 py-1.5 rounded-full transition-colors"
+          x-text="q"
+        ></button>
+      </template>
+    </div>
+  </div>
+
+  <!-- Результат -->
+  <div x-show="result" x-cloak class="fade-in space-y-4">
+
+    <!-- Метрики -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
+        <div class="text-2xl font-bold text-blue-600" x-text="result?.timing?.total_ms + ' мс'"></div>
+        <div class="text-xs text-gray-500 mt-1">Общее время</div>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
+        <div class="text-2xl font-bold text-purple-600" x-text="result?.timing?.search_ms + ' мс'"></div>
+        <div class="text-xs text-gray-500 mt-1">Поиск в базе</div>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
+        <div class="text-2xl font-bold text-indigo-600" x-text="result?.timing?.llm_ms + ' мс'"></div>
+        <div class="text-xs text-gray-500 mt-1">YandexGPT</div>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
+        <div class="text-2xl font-bold" :class="result?.escalated ? 'text-orange-500' : 'text-green-500'"
+          x-text="result?.escalated ? '⚠️ Эскалация' : '✅ Решено'">
+        </div>
+        <div class="text-xs text-gray-500 mt-1">Статус</div>
+      </div>
+    </div>
+
+    <!-- Основной блок: ответ + чанки -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+      <!-- Ответ -->
+      <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-semibold text-gray-800">💬 Ответ бота</h2>
+          <span class="text-xs px-2 py-1 rounded-full"
+            :class="result?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
+            x-text="result?.escalated ? 'Нужен оператор' : 'Автоответ'">
+          </span>
+        </div>
+        <div class="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-lg p-4" x-text="result?.answer"></div>
+
+        <!-- Ссылка на анализ -->
+        <div x-show="result?.analysis_url" class="mt-4">
+          <a :href="`/analysis/${result?.analysis_id}`" target="_blank"
+            class="inline-flex items-center gap-2 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg transition-colors font-medium">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+            Открыть полный анализ этого запроса →
+          </a>
+        </div>
+      </div>
+
+      <!-- Граф уверенности -->
+      <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h2 class="font-semibold text-gray-800 mb-4">📊 Уверенность по источникам</h2>
+        <canvas id="scoreChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- Чанки -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-gray-800">🔍 Найденные фрагменты</h2>
+        <span class="text-xs text-gray-400" x-text="result?.chunks?.length + ' фрагментов'"></span>
+      </div>
+      <div class="space-y-3">
+        <template x-for="chunk in result?.chunks" :key="chunk.rank">
+          <div class="chunk-card border rounded-lg p-4 cursor-pointer"
+            :class="chunk.rank === 1 ? 'border-blue-200 bg-blue-50' : 'border-gray-100 bg-gray-50'"
+            @click="chunk.expanded = !chunk.expanded">
+
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3 flex-1 min-w-0">
+                <!-- Ранг -->
+                <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  :class="chunk.rank === 1 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'"
+                  x-text="chunk.rank">
+                </div>
+                <!-- Источник -->
+                <span class="text-xs px-2 py-0.5 rounded font-medium flex-shrink-0"
+                  :class="chunk.source === 'kb' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'"
+                  x-text="chunk.source === 'kb' ? 'KB' : 'Тикет'">
+                </span>
+                <!-- Заголовок -->
+                <span class="text-sm text-gray-700 truncate" x-text="chunk.title || '(без заголовка)'"></span>
+              </div>
+
+              <!-- Скор -->
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <div class="w-24 bg-gray-200 rounded-full h-2">
+                  <div class="score-bar h-2 rounded-full"
+                    :class="chunk.score > 0.7 ? 'bg-green-500' : chunk.score > 0.5 ? 'bg-yellow-400' : 'bg-red-400'"
+                    :style="'width:' + (chunk.score * 100) + '%'">
+                  </div>
+                </div>
+                <span class="text-xs font-mono font-bold w-10 text-right"
+                  :class="chunk.score > 0.7 ? 'text-green-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
+                  x-text="(chunk.score * 100).toFixed(0) + '%'">
+                </span>
+                <svg class="w-4 h-4 text-gray-400 transition-transform" :class="chunk.expanded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Текст чанка (раскрывается) -->
+            <div x-show="chunk.expanded" x-cloak class="mt-3 pt-3 border-t border-gray-200">
+              <pre class="text-xs text-gray-600 leading-relaxed" x-text="chunk.text"></pre>
+              <div x-show="chunk.service" class="mt-2 text-xs text-gray-400" x-text="'Сервис: ' + chunk.service"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- График истории -->
+    <div x-show="history.length > 1" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <h2 class="font-semibold text-gray-800 mb-4">📈 Динамика сессии</h2>
+      <canvas id="historyChart" height="100"></canvas>
+    </div>
+
+  </div>
+
+  <!-- Все анализы -->
+  <div x-show="allAnalyses.length > 0" x-cloak class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="font-semibold text-gray-800">📋 Все запросы сессии</h2>
+      <span class="text-xs text-gray-400" x-text="allAnalyses.length + ' запросов'"></span>
+    </div>
+    <div class="divide-y divide-gray-50">
+      <template x-for="a in allAnalyses" :key="a.id">
+        <a :href="`/analysis/${a.id}`" target="_blank"
+          class="flex items-center gap-4 px-6 py-3 hover:bg-gray-50 transition-colors group">
+          <span class="w-2 h-2 rounded-full flex-shrink-0"
+            :class="a.escalated ? 'bg-orange-400' : 'bg-green-400'">
+          </span>
+          <span class="text-sm text-gray-700 flex-1 truncate" x-text="a.question"></span>
+          <span class="text-xs text-gray-400 flex-shrink-0" x-text="a.total_ms + ' мс'"></span>
+          <span class="text-xs px-2 py-0.5 rounded flex-shrink-0"
+            :class="a.source === 'telegram' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'"
+            x-text="a.source === 'telegram' ? '📱' : '🌐'">
+          </span>
+          <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-500 flex-shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </a>
+      </template>
+    </div>
+  </div>
+
+  <!-- Пустое состояние -->
+  <div x-show="!result && !loading" class="text-center py-16 text-gray-400">
+    <div class="text-5xl mb-4">🤖</div>
+    <p class="text-sm">Задайте вопрос — увидите как работает RAG изнутри</p>
+    <p class="text-xs mt-1">Поиск по 104 000 тикетам и 1 000 KB-статьям</p>
+  </div>
+
+</div>
+
+<script>
+function ragInspector() {
+  return {
+    query: '',
+    loading: false,
+    result: null,
+    apiOk: false,
+    history: [],
+    allAnalyses: [],
+    scoreChart: null,
+    historyChart: null,
+    quickQuestions: [
+      'Не подключается VPN',
+      'Ошибка в 1С при отчёте',
+      'Нет доступа к сетевой папке',
+      'Не работает принтер',
+      'Почта не отправляет письма',
+    ],
+
+    async init() {
+      try {
+        const r = await fetch('/health');
+        this.apiOk = r.ok;
+      } catch { this.apiOk = false; }
+      await this.loadAnalysesList();
+    },
+
+    async loadAnalysesList() {
+      try {
+        const r = await fetch('/analyses');
+        this.allAnalyses = await r.json();
+      } catch {}
+    },
+
+    async submit() {
+      if (!this.query.trim() || this.loading) return;
+      this.loading = true;
+      const q = this.query.trim();
+      try {
+        const r = await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q }),
+        });
+        const data = await r.json();
+        data.chunks = data.chunks.map(c => ({ ...c, expanded: false }));
+        this.result = data;
+        this.history.push({
+          query: q,
+          escalated: data.escalated,
+          total_ms: data.timing.total_ms,
+          analysis_id: data.analysis_id,
+          analysis_url: data.analysis_url,
+        });
+        await this.loadAnalysesList();
+        this.$nextTick(() => {
+          this.renderScoreChart(data.chunks);
+          if (this.history.length > 1) this.renderHistoryChart();
+        });
+      } catch (e) {
+        alert('Ошибка API: ' + e.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    renderScoreChart(chunks) {
+      const ctx = document.getElementById('scoreChart');
+      if (!ctx) return;
+      if (this.scoreChart) this.scoreChart.destroy();
+      this.scoreChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: chunks.map(c => `#${c.rank} ${c.title.slice(0, 20) || c.source}`),
+          datasets: [{
+            label: 'Уверенность',
+            data: chunks.map(c => +(c.score * 100).toFixed(1)),
+            backgroundColor: chunks.map(c =>
+              c.score > 0.7 ? 'rgba(34,197,94,0.7)' :
+              c.score > 0.5 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'
+            ),
+            borderRadius: 6,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { min: 0, max: 100, ticks: { callback: v => v + '%' } },
+            x: { ticks: { font: { size: 10 } } }
+          }
+        }
+      });
+    },
+
+    renderHistoryChart() {
+      const ctx = document.getElementById('historyChart');
+      if (!ctx) return;
+      if (this.historyChart) this.historyChart.destroy();
+      this.historyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: this.history.map((_, i) => `Запрос ${i + 1}`),
+          datasets: [{
+            label: 'Время ответа (мс)',
+            data: this.history.map(h => h.total_ms),
+            borderColor: 'rgb(99,102,241)',
+            backgroundColor: 'rgba(99,102,241,0.1)',
+            tension: 0.4,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { ticks: { callback: v => v + ' мс' } }
+          }
+        }
+      });
+    }
+  }
+}
+</script>
+</body>
+</html>

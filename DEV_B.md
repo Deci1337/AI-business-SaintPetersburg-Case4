@@ -12,7 +12,7 @@ RAG-индекс строит Разработчик A — дождись его
 
 ## Задачи
 
-- [ ] **1. Подготовить окружение**
+- [x] **1. Подготовить окружение**
   ```bash
   cd C:/Dev/AI-Agency/KaspiskyCase
   cp .env.example .env
@@ -22,13 +22,13 @@ RAG-индекс строит Разработчик A — дождись его
   ```
   → Verify: `python -c "from telegram.ext import ApplicationBuilder"` без ошибок
 
-- [ ] **2. Создать Telegram-бота**
+- [x] **2. Создать Telegram-бота**
   - Открыть @BotFather в Telegram
   - `/newbot` → имя: `BaltBereg Support` → username: `baltbereg_support_bot`
   - Скопировать токен в `.env` → `TELEGRAM_BOT_TOKEN=...`
   → Verify: токен в .env заполнен
 
-- [ ] **3. Добавить fallback-логику в llm.py**
+- [x] **3. Добавить fallback-логику в llm.py**
   Открыть `src/rag/llm.py`, добавить оценку уверенности:
   ```python
   # После получения results в функции ask():
@@ -40,7 +40,7 @@ RAG-индекс строит Разработчик A — дождись его
   ```
   → Verify: запрос "абракадабра xyz" → бот предлагает обратиться к оператору
 
-- [ ] **4. Улучшить UX бота — добавить команды**
+- [x] **4. Улучшить UX бота — добавить команды**
   Открыть `src/bot/main.py`, добавить:
   ```python
   async def help_cmd(update, context):
@@ -58,7 +58,7 @@ RAG-индекс строит Разработчик A — дождись его
   ```
   → Verify: `/help` в боте возвращает подсказку
 
-- [ ] **5. Добавить логирование диалогов**
+- [x] **5. Добавить логирование диалогов**
   Создать `src/bot/logger.py`:
   ```python
   import csv, os
@@ -82,7 +82,7 @@ RAG-индекс строит Разработчик A — дождись его
   ```
   → Verify: после диалога с ботом появляется `data/dialogs.csv`
 
-- [ ] **6. Создать FastAPI endpoint для демо жюри**
+- [x] **6. Создать FastAPI endpoint для демо жюри**
   Создать `src/api/app.py`:
   ```python
   from fastapi import FastAPI
