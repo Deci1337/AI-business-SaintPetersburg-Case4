@@ -4,12 +4,13 @@ services:
     platform: linux/amd64
     container_name: mssql-baltbereg
     restart: unless-stopped
+    mem_limit: 2g
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env}"
       MSSQL_PID: "Developer"
     ports:
-      - "1433:1433"
+      - "127.0.0.1:1433:1433"
     volumes:
       - mssql-data:/var/opt/mssql
       - ./data/cleaned.bak:/var/opt/mssql/backup/cleaned.bak:ro
@@ -26,7 +27,44 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
+
+  api:
+    build: .
+    container_name: baltbereg-api
+    restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    env_file: .env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+      - ./src/web:/app/src/web
+    depends_on:
+      mssql:
+        condition: service_healthy
+
+  user-bot:
+    build: .
+    container_name: baltbereg-user-bot
+    restart: unless-stopped
+    command: ["python", "-m", "src.bot.main"]
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - api
+
+  admin-bot:
+    build: .
+    container_name: baltbereg-admin-bot
+    restart: unless-stopped
+    command: ["python", "-m", "src.bot.admin_bot"]
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - api
 
 volumes:
   mssql-data:

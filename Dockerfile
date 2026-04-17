@@ -12,6 +12,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
-COPY .env.example .env.example
 
-CMD ["python", "-m", "src.bot.main"]
+CMD ["python", "-m", "src.api.app"]
