@@ -249,3 +249,4 @@ if elapsed > 2.0:
 | `src/rag/indexer.py` | Добавить блок expenses + Description в тикеты |
 | `src/rag/retriever.py` | Добавить третью коллекцию в поиск |
 | Остальное | Не трогать |
+

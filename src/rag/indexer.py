@@ -6,7 +6,7 @@ import re
 import chromadb
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
-from .db import fetch_tickets, fetch_kb_articles
+from .db import fetch_tickets, fetch_kb_articles, fetch_task_expenses
 
 CHROMA_PATH = "./data/chroma"
 EMBED_MODEL = "intfloat/multilingual-e5-small"  # легковесная, русский ок
@@ -73,13 +73,15 @@ def build_index():
         _upsert_batched(kb_col, docs, ids, metas, embeddings)
     print(f"KB: {len(docs)} чанков")
 
-    # Тикеты (Comment — главный источник)
+    # Тикеты (Comment + Description)
     ticket_col = client.get_or_create_collection("tickets")
     print("Загружаю тикеты...")
     tickets = fetch_tickets()
     docs, ids, metas = [], [], []
     for t in tickets:
-        text = clean_html(t["Comment"])
+        desc = clean_html(t["Description"] or "")
+        comment_text = clean_html(t["Comment"])
+        text = f"{desc}\n{comment_text}".strip() if desc else comment_text
         if not text:
             continue
         title = (t["Name"] or "")
@@ -93,12 +95,37 @@ def build_index():
                 "service": t["ServiceName"] or "",
                 "type": t["TaskTypeName"] or "",
                 "status": t["StatusName"] or "",
+                "priority": t["PriorityName"] or "",
             })
 
     if docs:
         embeddings = model.encode(docs, batch_size=64, show_progress_bar=True).tolist()
         _upsert_batched(ticket_col, docs, ids, metas, embeddings)
     print(f"Тикеты: {len(docs)} чанков")
+
+    # TaskExpenses — комментарии инженеров при выполнении работ
+    expenses_col = client.get_or_create_collection("expenses")
+    print("Загружаю TaskExpenses...")
+    expenses = fetch_task_expenses()
+    docs, ids, metas = [], [], []
+    for e in expenses:
+        text = e["Comments"]
+        if not text or len(text.strip()) < 20:
+            continue
+        title = e["TaskName"] or ""
+        for i, chunk in enumerate(chunk_text(text)):
+            full = f"Решение по заявке: {title}\n{chunk}"
+            docs.append(full)
+            ids.append(f"expense_{e['Id']}_{i}")
+            metas.append({
+                "source": "expense",
+                "title": title,
+                "service": e["ServiceName"] or "",
+            })
+    if docs:
+        embeddings = model.encode(docs, batch_size=64, show_progress_bar=True).tolist()
+        _upsert_batched(expenses_col, docs, ids, metas, embeddings)
+    print(f"Expenses: {len(docs)} чанков")
     print("Индекс построен.")
 
 

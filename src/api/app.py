@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from src.rag.llm import ask_full
 from src.rag.retriever import search
+from src.rag.db import get_connection
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -150,6 +151,66 @@ def get_stats():
             "api": sum(1 for d in analyses.values() if d.get("source") != "telegram"),
         },
     }
+
+
+@app.get("/db-stats")
+def db_stats():
+    """Реальная статистика из БД: топ сервисы, просрочки, объём за месяцы."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT TOP 10
+                    MAX(s.NameXml.value('(/Language/Ru)[1]', 'nvarchar(500)')) AS ServiceName,
+                    COUNT(*) AS cnt
+                FROM Task t
+                LEFT JOIN Service s ON t.ServiceId = s.Id
+                WHERE t.Created >= DATEADD(YEAR, -1, GETDATE())
+                GROUP BY t.ServiceId
+                ORDER BY cnt DESC
+            """)
+            top_services = [{"service": row[0] or "—", "count": row[1]} for row in cursor.fetchall()]
+
+            cursor.execute("""
+                SELECT
+                    SUM(CASE WHEN ReactionOverdue = 1 THEN 1 ELSE 0 END) AS reaction_overdue,
+                    SUM(CASE WHEN ResolutionOverdue = 1 THEN 1 ELSE 0 END) AS resolution_overdue,
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN Closed IS NOT NULL THEN 1 ELSE 0 END) AS closed,
+                    AVG(CAST(ResolutionTimeFact AS float)) AS avg_resolution_min
+                FROM Task
+                WHERE Created >= DATEADD(YEAR, -1, GETDATE())
+            """)
+            row = cursor.fetchone()
+            overdue_stats = {
+                "reaction_overdue": row[0] or 0,
+                "resolution_overdue": row[1] or 0,
+                "total": row[2] or 0,
+                "closed": row[3] or 0,
+                "avg_resolution_min": round(row[4], 1) if row[4] else None,
+            }
+
+            cursor.execute("""
+                SELECT
+                    YEAR(Created) AS yr,
+                    MONTH(Created) AS mo,
+                    COUNT(*) AS cnt
+                FROM Task
+                WHERE Created >= DATEADD(MONTH, -12, GETDATE())
+                GROUP BY YEAR(Created), MONTH(Created)
+                ORDER BY yr, mo
+            """)
+            monthly = [{"year": r[0], "month": r[1], "count": r[2]} for r in cursor.fetchall()]
+
+        return {
+            "top_services": top_services,
+            "overdue": overdue_stats,
+            "monthly": monthly,
+        }
+    except Exception as e:
+        log.error("db-stats error: %s", e)
+        raise HTTPException(500, f"DB error: {e}")
 
 
 @app.get("/health")

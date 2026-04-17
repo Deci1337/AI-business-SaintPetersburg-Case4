@@ -269,6 +269,39 @@
     </div>
   </div>
 
+  <!-- Статистика реальной БД -->
+  <div x-show="dbStats" x-cloak class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <h2 class="font-semibold text-gray-800 mb-4">🗄️ Реальная БД: последние 12 месяцев</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+      <div class="text-center">
+        <div class="text-3xl font-bold text-gray-900" x-text="dbStats?.overdue?.total?.toLocaleString()"></div>
+        <div class="text-xs text-gray-400 mt-1">Всего заявок</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-green-600" x-text="dbStats?.overdue?.closed?.toLocaleString()"></div>
+        <div class="text-xs text-gray-400 mt-1">Закрыто</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-red-500" x-text="dbStats?.overdue?.resolution_overdue?.toLocaleString()"></div>
+        <div class="text-xs text-gray-400 mt-1">Просрочено</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-blue-600" x-text="dbStats?.overdue?.avg_resolution_min ? Math.round(dbStats.overdue.avg_resolution_min / 60) + ' ч' : '—'"></div>
+        <div class="text-xs text-gray-400 mt-1">Среднее решение</div>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <p class="text-xs font-medium text-gray-500 mb-2">ТОП СЕРВИСОВ</p>
+        <canvas id="dbServiceChart" height="200"></canvas>
+      </div>
+      <div>
+        <p class="text-xs font-medium text-gray-500 mb-2">ДИНАМИКА ПО МЕСЯЦАМ</p>
+        <canvas id="dbMonthlyChart" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
   <!-- Все анализы -->
   <div x-show="allAnalyses.length > 0" x-cloak class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -315,10 +348,13 @@ function ragInspector() {
     history: [],
     allAnalyses: [],
     stats: null,
+    dbStats: null,
     scoreChart: null,
     historyChart: null,
     serviceChart: null,
     priorityChart: null,
+    dbServiceChart: null,
+    dbMonthlyChart: null,
     quickQuestions: [
       'Не подключается VPN',
       'Ошибка в 1С при отчёте',
@@ -333,6 +369,7 @@ function ragInspector() {
         this.apiOk = r.ok;
       } catch { this.apiOk = false; }
       await this.loadAnalysesList();
+      this.loadDbStats();
     },
 
     async loadAnalysesList() {
@@ -422,6 +459,52 @@ function ragInspector() {
       } finally {
         this.loading = false;
       }
+    },
+
+    async loadDbStats() {
+      try {
+        const r = await fetch('/db-stats');
+        this.dbStats = await r.json();
+        this.$nextTick(() => {
+          this.renderDbServiceChart(this.dbStats.top_services);
+          this.renderDbMonthlyChart(this.dbStats.monthly);
+        });
+      } catch {}
+    },
+
+    renderDbServiceChart(data) {
+      const ctx = document.getElementById('dbServiceChart');
+      if (!ctx || !data) return;
+      if (this.dbServiceChart) this.dbServiceChart.destroy();
+      this.dbServiceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.map(d => (d.service || '—').slice(0, 30)),
+          datasets: [{ data: data.map(d => d.count), backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 4 }]
+        },
+        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+      });
+    },
+
+    renderDbMonthlyChart(data) {
+      const ctx = document.getElementById('dbMonthlyChart');
+      if (!ctx || !data) return;
+      if (this.dbMonthlyChart) this.dbMonthlyChart.destroy();
+      const months = ['', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+      this.dbMonthlyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => `${months[d.month]} ${d.year}`),
+          datasets: [{
+            label: 'Заявок',
+            data: data.map(d => d.count),
+            borderColor: 'rgb(16,185,129)',
+            backgroundColor: 'rgba(16,185,129,0.1)',
+            tension: 0.4, fill: true,
+          }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
     },
 
     renderScoreChart(chunks) {

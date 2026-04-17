@@ -57,6 +57,28 @@ def fetch_tickets(limit: int = None) -> list[dict]:
         return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
 
+def fetch_task_expenses(limit: int = None) -> list[dict]:
+    sql = """
+        SELECT TOP {limit}
+            te.Id,
+            te.TaskId,
+            te.Comments,
+            t.Name AS TaskName,
+            s.NameXml.value('(/Language/Ru)[1]', 'nvarchar(500)') AS ServiceName
+        FROM TaskExpenses te
+        JOIN Task t ON te.TaskId = t.Id
+        LEFT JOIN Service s ON t.ServiceId = s.Id
+        WHERE te.Comments IS NOT NULL AND LEN(te.Comments) > 30
+        ORDER BY te.TaskId
+    """.format(limit=limit if limit else 500000)
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        cols = [c[0] for c in cursor.description]
+        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+
 def fetch_kb_articles() -> list[dict]:
     sql = """
         SELECT
