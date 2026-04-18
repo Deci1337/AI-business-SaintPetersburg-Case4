@@ -34,6 +34,12 @@ FALLBACK = (
 
 EXTRACT_PROMPT = "Выдели суть IT-проблемы из сообщения пользователя одним коротким предложением на русском. Только суть, без лишних слов. Сообщение: {query}"
 
+TOPIC_PROMPT = """Определи тему IT-обращения сотрудника компании. Дай краткое название темы (2-4 слова, существительное или словосочетание) на русском языке. Только название темы, без пояснений.
+
+Примеры правильных ответов: "Корпоративный портал", "Резервное копирование", "Удалённая работа", "Антивирусная защита", "Телефония и гарнитуры", "Мобильные устройства".
+
+Обращение сотрудника: {query}"""
+
 RELEVANCE_PROMPT = """Ты — фильтр входящих запросов в IT сервис-деск компании «Балтийский Берег» (пищевое производство, ~1000 сотрудников).
 
 Твоя задача: определить, является ли запрос пользователя релевантным для IT-поддержки.
@@ -162,6 +168,20 @@ def classify(user_query: str) -> dict:
     return {"service": service, "priority": priority}
 
 
+def classify_topic(user_query: str) -> str:
+    """Определяет реальную тему для запросов категории 'Другое' через LLM."""
+    try:
+        result = _call_llm([
+            {"role": "user", "content": TOPIC_PROMPT.format(query=user_query)},
+        ])
+        topic = result.strip().strip('"').strip("'")
+        # Берём только первую строку, не длиннее 50 символов
+        topic = topic.split("\n")[0].strip()[:50]
+        return topic if len(topic) > 2 else "Другое"
+    except Exception:
+        return "Другое"
+
+
 def ask(user_query: str) -> tuple[str, bool]:
     """Возвращает (ответ, escalated)."""
     search_query = extract_query(user_query)
@@ -209,11 +229,14 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
     results = search(search_query, n_results=6)
 
     if not results or results[0]["score"] < 0.4:
+        cl = classify(user_query)
+        if cl["service"] == "Другое":
+            cl["service"] = classify_topic(user_query)
         return {
             "answer": FALLBACK,
             "escalated": True,
             "irrelevant": False,
-            "classification": {"service": "Другое", "priority": "Средний"},
+            "classification": cl,
             "top_source": None,
         }
 
@@ -230,6 +253,8 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
         {"role": "user", "content": "\n\n".join(user_content_parts)},
     ])
     classification = classify(user_query)
+    if classification["service"] == "Другое":
+        classification["service"] = classify_topic(user_query)
     escalated = _is_escalated(results[0]["score"], answer)
 
     top = results[0]
