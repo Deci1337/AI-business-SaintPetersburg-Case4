@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8001")
+API_KEY = os.getenv("API_KEY")
 
 HELP_TEXT = (
     "Я AI-помощник сервис-деска «Балтийский Берег».\n\n"
@@ -52,10 +53,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
 
     try:
+        headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
         async with httpx.AsyncClient(timeout=120) as client:
             r = await client.post(
                 f"{API_BASE}/ask",
                 json={"question": query, "source": "telegram"},
+                headers=headers,
             )
             data = r.json()
         answer = data["answer"]

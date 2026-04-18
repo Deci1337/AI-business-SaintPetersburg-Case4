@@ -101,7 +101,7 @@ def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) 
         "Ответ модели:",
         truncated,
         "",
-        f"Анализ: localhost:8001/analysis/{analysis_id}",
+        f"Анализ: {os.getenv('API_PUBLIC_URL', 'http://localhost:8001')}/analysis/{analysis_id}",
         "",
         f"Статус: {status}",
         "",

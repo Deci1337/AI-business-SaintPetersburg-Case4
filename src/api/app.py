@@ -8,7 +8,7 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -21,6 +21,15 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("baltbereg.api")
 PUBLIC_URL = os.getenv("API_PUBLIC_URL", "http://localhost:8001")
+API_KEY = os.getenv("API_KEY")
+
+
+def require_api_key(authorization: str | None = Header(default=None)):
+    if not API_KEY:
+        return
+    expected = f"Bearer {API_KEY}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 app = FastAPI(title="BaltBereg Service Desk API", version="1.0.0")
 
@@ -54,7 +63,7 @@ class Query(BaseModel):
 
 
 @app.post("/ask")
-def ask_endpoint(q: Query):
+def ask_endpoint(q: Query, _=Depends(require_api_key)):
     t0 = time.time()
     chunks = search(q.question, n_results=6)
     search_ms = round((time.time() - t0) * 1000)
