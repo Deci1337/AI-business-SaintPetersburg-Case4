@@ -119,6 +119,24 @@ def get_analysis(aid: str):
     return analyses[aid]
 
 
+@app.get("/stats/weekly")
+def get_weekly_stats():
+    """За последние 7 дней: всего запросов боту и сколько эскалировано."""
+    from datetime import timedelta
+    cutoff = datetime.now() - timedelta(days=7)
+    week = [d for d in analyses.values() if datetime.fromisoformat(d["created_at"]) >= cutoff]
+    total = len(week)
+    escalated = sum(1 for d in week if d["escalated"])
+    resolved = total - escalated
+    return {
+        "total": total,
+        "escalated": escalated,
+        "resolved": resolved,
+        "escalation_rate": round(escalated / total * 100, 1) if total else 0,
+        "automation_rate": round(resolved / total * 100, 1) if total else 0,
+    }
+
+
 @app.get("/stats")
 def get_stats():
     total = len(analyses)
@@ -243,6 +261,42 @@ def get_weights():
         return defaults
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+@app.get("/ratings/timeline")
+def ratings_timeline(period: str = "day"):
+    """Динамика оценок: всего оценено и положительно (4-5★) по периодам (hour/day/week)."""
+    path = "data/ratings.csv"
+    if not os.path.exists(path):
+        return {"labels": [], "total": [], "positive": []}
+
+    fmt_map = {"hour": "%Y-%m-%d %H:00", "day": "%Y-%m-%d", "week": "%Y-W%W"}
+    fmt = fmt_map.get(period, "%Y-%m-%d")
+
+    from collections import defaultdict
+    buckets_total = defaultdict(int)
+    buckets_pos = defaultdict(int)
+
+    with open(path, encoding="utf-8") as f:
+        for row in csv.reader(f):
+            if len(row) < 3:
+                continue
+            try:
+                ts = datetime.fromisoformat(row[0])
+                score = int(row[2])
+                key = ts.strftime(fmt)
+                buckets_total[key] += 1
+                if score >= 4:
+                    buckets_pos[key] += 1
+            except (ValueError, IndexError):
+                pass
+
+    labels = sorted(buckets_total.keys())
+    return {
+        "labels": labels,
+        "total": [buckets_total[l] for l in labels],
+        "positive": [buckets_pos[l] for l in labels],
+    }
 
 
 @app.get("/ratings/stats")
