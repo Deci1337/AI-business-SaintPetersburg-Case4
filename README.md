@@ -98,7 +98,7 @@ docker compose up -d --build
 docker compose exec api python -m src.rag.indexer
 ```
 
-Дашборд: http://localhost:8001
+Дашборд доступен по адресу `http://<IP_сервера>:8001` — подставьте IP вашей VM (или домен из `API_PUBLIC_URL` в `.env`).
 
 ### 3. Деплой на Yandex Cloud VM
 
