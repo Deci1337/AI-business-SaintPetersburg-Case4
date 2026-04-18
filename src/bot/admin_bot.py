@@ -82,7 +82,22 @@ def _claimed_keyboard(admin_name: str) -> InlineKeyboardMarkup:
     ])
 
 
-def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) -> str:
+def _format_similar_solutions(chunks: list) -> str:
+    expense_chunks = [c for c in chunks if c.get("source") == "expense"][:3]
+    if not expense_chunks:
+        return ""
+    lines = ["", "💡 Похожие решения из базы:"]
+    for i, c in enumerate(expense_chunks, 1):
+        title = c.get("title", "—")[:50]
+        text = c.get("text", "")[:150].replace("\n", " ").strip()
+        score = c.get("score", 0)
+        lines.append(f"  {i}. [{round(score*100)}%] {title}")
+        if text:
+            lines.append(f"     {text}...")
+    return "\n".join(lines)
+
+
+def _format_card(analysis_id: str, question: str, answer: str, escalated: bool, chunks: list | None = None) -> str:
     status = "🚨 Эскалация — требует ответа оператора" if escalated else "✅ Автоответ AI"
     truncated = answer[:600] + ("..." if len(answer) > 600 else "")
     lines = [
@@ -97,7 +112,12 @@ def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) 
         "",
         f"Статус: {status}",
     ]
-    if escalated:
+    if escalated and chunks:
+        similar = _format_similar_solutions(chunks)
+        if similar:
+            lines.append(similar)
+        lines.append("\nНажмите «Взять вопрос», чтобы ответить сотруднику вручную.")
+    elif escalated:
         lines.append("\nНажмите «Взять вопрос», чтобы ответить сотруднику вручную.")
     return "\n".join(lines)
 
@@ -110,6 +130,7 @@ async def notify_admins(
     answer: str,
     escalated: bool,
     user_chat_id: int,
+    chunks: list | None = None,
 ) -> None:
     admin_ids = [SUPER_ADMIN_ID] + _load_admins() if SUPER_ADMIN_ID else _load_admins()
     if not admin_ids or not ADMIN_BOT_TOKEN:
@@ -121,7 +142,7 @@ async def notify_admins(
         "answer": answer,
     }
 
-    text = _format_card(analysis_id, question, answer, escalated)
+    text = _format_card(analysis_id, question, answer, escalated, chunks or [])
     keyboard = _escalation_keyboard(analysis_id) if escalated else None
 
     bot = Bot(token=ADMIN_BOT_TOKEN)

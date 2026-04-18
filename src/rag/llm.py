@@ -136,8 +136,22 @@ def ask(user_query: str) -> tuple[str, bool]:
     return answer, escalated
 
 
-def ask_full(user_query: str) -> dict:
-    """Полный результат: ответ + эскалация + классификация + топ-чанки."""
+def _build_history_block(history: list[dict]) -> str:
+    """Форматирует историю диалога для вставки в промпт."""
+    if not history:
+        return ""
+    lines = ["Предыдущий диалог:"]
+    for turn in history:
+        lines.append(f"Сотрудник: {turn['user']}")
+        lines.append(f"Ассистент: {turn['assistant']}")
+    return "\n".join(lines)
+
+
+def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
+    """Полный результат: ответ + эскалация + классификация + топ-чанки.
+
+    history — список dict {"user": str, "assistant": str}, последние N пар.
+    """
     search_query = extract_query(user_query)
     results = search(search_query, n_results=6)
 
@@ -150,9 +164,16 @@ def ask_full(user_query: str) -> dict:
         }
 
     context = format_context(results)
+    history_block = _build_history_block(history or [])
+
+    user_content_parts = [f"Контекст:\n{context}"]
+    if history_block:
+        user_content_parts.append(history_block)
+    user_content_parts.append(f"Текущий вопрос: {user_query}")
+
     answer = _call_llm([
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {user_query}"},
+        {"role": "user", "content": "\n\n".join(user_content_parts)},
     ])
     classification = classify(user_query)
     escalated = _is_escalated(results[0]["score"], answer)

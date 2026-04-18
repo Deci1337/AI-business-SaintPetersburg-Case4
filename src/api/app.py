@@ -79,9 +79,15 @@ def save_analysis(data: dict) -> str:
     return aid
 
 
+class DialogTurn(BaseModel):
+    user: str
+    assistant: str
+
+
 class Query(BaseModel):
     question: str
     source: str = "api"
+    history: list[DialogTurn] = []
 
 
 @app.post("/ask")
@@ -91,7 +97,8 @@ def ask_endpoint(q: Query, _=Depends(require_api_key)):
     search_ms = round((time.time() - t0) * 1000)
 
     t1 = time.time()
-    result = ask_full(q.question)
+    history = [{"user": t.user, "assistant": t.assistant} for t in q.history]
+    result = ask_full(q.question, history=history)
     llm_ms = round((time.time() - t1) * 1000)
     total_ms = round((time.time() - t0) * 1000)
 

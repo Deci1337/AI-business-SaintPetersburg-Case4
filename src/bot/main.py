@@ -4,7 +4,7 @@ import html
 import os
 import logging
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.constants import ParseMode, ChatAction
@@ -19,8 +19,37 @@ API_BASE = os.getenv("API_BASE_URL", "http://localhost:8001")
 API_KEY = os.getenv("API_KEY")
 RATINGS_FILE = "data/ratings.csv"
 
-# analysis_id -> {"question": str, "answer": str}
+HISTORY_MAX_TURNS = 3       # пар user/assistant в контексте
+HISTORY_TTL_MINUTES = 30    # минут неактивности до авто-сброса
+
+# analysis_id -> {"question": str, "answer": str, "chat_id": int}
 _pending_ratings: dict = {}
+
+# chat_id -> {"turns": [{"user": str, "assistant": str}], "last_active": datetime}
+_dialog_history: dict[int, dict] = {}
+
+
+def _get_history(chat_id: int) -> list[dict]:
+    """Возвращает актуальные повороты диалога (с проверкой TTL)."""
+    entry = _dialog_history.get(chat_id)
+    if not entry:
+        return []
+    if datetime.now() - entry["last_active"] > timedelta(minutes=HISTORY_TTL_MINUTES):
+        _dialog_history.pop(chat_id, None)
+        return []
+    return entry["turns"]
+
+
+def _push_history(chat_id: int, user_msg: str, assistant_msg: str) -> None:
+    """Добавляет пару в историю, обрезая до HISTORY_MAX_TURNS."""
+    entry = _dialog_history.setdefault(chat_id, {"turns": [], "last_active": datetime.now()})
+    entry["turns"].append({"user": user_msg, "assistant": assistant_msg})
+    entry["turns"] = entry["turns"][-HISTORY_MAX_TURNS:]
+    entry["last_active"] = datetime.now()
+
+
+def _clear_history(chat_id: int) -> None:
+    _dialog_history.pop(chat_id, None)
 
 
 def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> None:
@@ -47,13 +76,15 @@ HELP_TEXT = (
     "• Не работает принтер\n"
     "• Нет доступа к папке на сервере\n\n"
     "Команды:\n"
-    "/start — начать\n"
-    "/new — новый вопрос\n"
+    "/start — начать новый диалог\n"
+    "/new — сбросить контекст и начать заново\n"
     "/help — помощь"
 )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    _clear_history(chat_id)
     await update.message.reply_text(
         "Здравствуйте! Я AI-помощник сервис-деска «Балтийский Берег».\n"
         "Опишите вашу проблему — найду решение в базе знаний."
@@ -61,7 +92,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Хорошо, начнём сначала. Опишите вашу проблему.")
+    chat_id = update.effective_chat.id
+    _clear_history(chat_id)
+    await update.message.reply_text(
+        "Контекст диалога сброшен. Опишите новую проблему."
+    )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,16 +105,23 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text
+    chat_id = update.effective_chat.id
     user_id = str(update.effective_user.id)
 
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+
+    history = _get_history(chat_id)
 
     try:
         headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
         async with httpx.AsyncClient(timeout=120) as client:
             r = await client.post(
                 f"{API_BASE}/ask",
-                json={"question": query, "source": "telegram"},
+                json={
+                    "question": query,
+                    "source": "telegram",
+                    "history": history,
+                },
                 headers=headers,
             )
             data = r.json()
@@ -98,24 +140,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     analysis_id = data.get("analysis_id") if isinstance(data, dict) else None
 
     if escalated:
-        text = "Ваш запрос передан специалисту поддержки. Ожидайте ответа."
+        # Диалог закрыт — очищаем контекст
+        _clear_history(chat_id)
+        text = (
+            "Ваш запрос передан специалисту поддержки. Ожидайте ответа.\n\n"
+            "<i>💬 Диалог закрыт — вопрос передан оператору. "
+            "Для нового обращения просто напишите сообщение.</i>"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     else:
+        # Сохраняем пару в историю
+        _push_history(chat_id, query, answer)
+
         parts = [html.escape(answer)]
         if top_source and top_source.get("title"):
             src_label = "KB" if top_source.get("source") == "kb" else ("Решение" if top_source.get("source") == "expense" else "Тикет")
             parts.append(f"\n<i>📎 {src_label}: {html.escape(top_source['title'][:60])}</i>")
         text = "\n".join(parts)
 
-    if escalated:
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-    else:
-        # Показываем кнопки оценки только для автоответов
-        _pending_ratings[analysis_id] = {"question": query, "answer": answer}
+        _pending_ratings[analysis_id] = {"question": query, "answer": answer, "chat_id": chat_id}
         await update.message.reply_text(
             text + "\n\n<i>Оцените ответ — это помогает улучшить систему:</i>",
             parse_mode=ParseMode.HTML,
             reply_markup=_rating_keyboard(analysis_id) if analysis_id else None,
         )
+
     log_dialog(user_id, query, answer, escalated)
 
     try:
@@ -125,7 +174,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             question=query,
             answer=answer,
             escalated=escalated,
-            user_chat_id=update.effective_chat.id,
+            user_chat_id=chat_id,
+            chunks=data.get("chunks", []),
         ))
     except Exception as e:
         logging.warning(f"notify_admins error: {e}")
@@ -144,9 +194,27 @@ async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     _pending_ratings.pop(aid, None)
 
     stars = "⭐" * score + "☆" * (5 - score)
-    thanks = {5: "Отлично! Спасибо.", 4: "Хорошо, учтём.", 3: "Понятно, постараемся лучше.", 2: "Спасибо, исправим.", 1: "Учтём, передадим в анализ."}
+    thanks = {
+        5: "Отлично! Рад помочь.",
+        4: "Хорошо, учтём.",
+        3: "Понятно, постараемся лучше.",
+        2: "Спасибо, исправим.",
+        1: "Учтём, передадим в анализ.",
+    }
     await q.edit_message_reply_markup(reply_markup=None)
-    await q.message.reply_text(f"{stars} {thanks.get(score, 'Спасибо!')}")
+
+    # После любой оценки — закрываем диалог и уведомляем
+    chat_id = p.get("chat_id")
+    if chat_id:
+        _clear_history(chat_id)
+        close_note = "\n\n<i>💬 Диалог закрыт — вопрос решён. Для нового обращения просто напишите сообщение.</i>"
+    else:
+        close_note = ""
+
+    await q.message.reply_text(
+        f"{stars} {thanks.get(score, 'Спасибо!')}{close_note}",
+        parse_mode=ParseMode.HTML,
+    )
 
 
 def main():
