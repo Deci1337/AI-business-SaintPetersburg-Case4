@@ -115,7 +115,26 @@ class Query(BaseModel):
 @app.post("/ask")
 def ask_endpoint(q: Query, _=Depends(require_api_key)):
     t0 = time.time()
+    is_internal = q.source == "internal"
     history = [{"user": t.user, "assistant": t.assistant} for t in q.history]
+
+    # Для внутренних вызовов (генерация темы/идеи) — минимальный путь без RAG и без сохранения
+    if is_internal:
+        from src.rag.llm import _call_llm
+        try:
+            text = _call_llm([{"role": "user", "content": q.question}])
+        except Exception as e:
+            text = ""
+            log.warning(f"internal ask failed: {e}")
+        return {
+            "answer": text,
+            "escalated": False,
+            "classification": {},
+            "top_source": None,
+            "chunks": [],
+            "internal": True,
+        }
+
     result = ask_full(q.question, history=history)
 
     # Нерелевантный запрос — не пишем в статистику, не сохраняем
@@ -292,9 +311,20 @@ def knowledge_gaps(period: str = "month", top_n: int = 7):
     # Внутри категории — счётчик нормализованных вопросов + оригинал
     cat_qcounts: dict[str, dict[str, dict]] = defaultdict(dict)
 
+    # Промпт-маркеры: внутренние LLM-вызовы, которые не должны попадать в топ вопросов
+    _PROMPT_MARKERS = (
+        "опиши одним коротким предложением",
+        "сформулируй тему",
+        "выдели суть it-проблемы",
+        "определи тему it-обращения",
+    )
+
     for entry in rows:
         svc = entry.get("service", "Другое")
         q_orig = entry.get("question", "").strip()
+        q_low = q_orig.lower()
+        if any(m in q_low for m in _PROMPT_MARKERS):
+            continue  # скрываем старый шум от internal-вызовов
         cat_counts[svc] += 1
 
         if q_orig:
