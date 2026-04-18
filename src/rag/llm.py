@@ -34,6 +34,31 @@ FALLBACK = (
 
 EXTRACT_PROMPT = "Выдели суть IT-проблемы из сообщения пользователя одним коротким предложением на русском. Только суть, без лишних слов. Сообщение: {query}"
 
+RELEVANCE_PROMPT = """Ты — фильтр входящих запросов в IT сервис-деск компании «Балтийский Берег» (пищевое производство, ~1000 сотрудников).
+
+Твоя задача: определить, является ли запрос пользователя релевантным для IT-поддержки.
+
+РЕЛЕВАНТНО — запрос касается:
+- компьютеров, ноутбуков, принтеров, сканеров
+- программ: 1С, ERP, Outlook, Windows, Office и любого ПО
+- сети, интернета, VPN, удалённого доступа
+- паролей, доступа, учётных записей, Active Directory
+- серверов, баз данных, IT-инфраструктуры
+- любой технической проблемы на рабочем месте
+- заявок, тикетов, обращений в поддержку
+
+НЕ РЕЛЕВАНТНО — запрос:
+- на посторонние темы (погода, рецепты, политика, развлечения)
+- содержит оскорбления, угрозы, нецензурную лексику
+- бессмысленный набор слов или символов
+- касается личных (не рабочих) вопросов не связанных с IT
+
+Ответь СТРОГО одним словом:
+- "РЕЛЕВАНТНО" — если запрос относится к IT-поддержке
+- "НЕРЕЛЕВАНТНО" — если запрос не по теме или неуместен
+
+Запрос пользователя: {query}"""
+
 _NO_INFO_MARKERS = [
     "нет информации",
     "не содержит информации",
@@ -48,6 +73,24 @@ _NO_INFO_MARKERS = [
 def _is_escalated(top_score: float, answer: str) -> bool:
     a = answer.lower()
     return top_score < 0.45 or "не знаю" in a or any(m in a for m in _NO_INFO_MARKERS)
+
+
+def check_relevance(user_query: str) -> bool:
+    """Возвращает True если запрос релевантен IT-поддержке, False если оффтоп/бред."""
+    # Очень короткие бессмысленные сообщения — сразу нерелевантны
+    stripped = user_query.strip()
+    if len(stripped) < 3:
+        return False
+    # Только цифры/символы без букв — бред
+    if not any(c.isalpha() for c in stripped):
+        return False
+    try:
+        result = _call_llm([
+            {"role": "user", "content": RELEVANCE_PROMPT.format(query=user_query)},
+        ])
+        return "РЕЛЕВАНТНО" in result.upper() and "НЕРЕЛЕВАНТНО" not in result.upper()
+    except Exception:
+        return True  # при ошибке LLM — не блокируем, пропускаем дальше
 
 
 def extract_query(user_query: str) -> str:
@@ -151,7 +194,17 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
     """Полный результат: ответ + эскалация + классификация + топ-чанки.
 
     history — список dict {"user": str, "assistant": str}, последние N пар.
+    Если запрос нерелевантен — возвращает irrelevant=True, статистика не пишется.
     """
+    if not check_relevance(user_query):
+        return {
+            "answer": "",
+            "escalated": False,
+            "irrelevant": True,
+            "classification": {},
+            "top_source": None,
+        }
+
     search_query = extract_query(user_query)
     results = search(search_query, n_results=6)
 
@@ -159,6 +212,7 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
         return {
             "answer": FALLBACK,
             "escalated": True,
+            "irrelevant": False,
             "classification": {"service": "Другое", "priority": "Средний"},
             "top_source": None,
         }
@@ -188,6 +242,7 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
     return {
         "answer": answer,
         "escalated": escalated,
+        "irrelevant": False,
         "classification": classification,
         "top_source": top_source,
     }

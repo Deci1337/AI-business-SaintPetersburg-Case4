@@ -132,15 +132,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data = r.json()
         answer = data["answer"]
         escalated = data["escalated"]
+        irrelevant = data.get("irrelevant", False)
         classification = data.get("classification", {})
         top_source = data.get("top_source")
     except Exception as e:
         logging.error(f"Error for user {user_id}: {e}")
         answer = "Произошла ошибка. Попробуйте позже или обратитесь к специалисту поддержки."
         escalated = True
+        irrelevant = False
         classification = {}
         top_source = None
         data = {}
+
+    # Нерелевантный запрос — просим уточнить, ничего не логируем
+    if irrelevant:
+        await update.message.reply_text(
+            "Я помогаю только с вопросами IT-поддержки: компьютеры, программы, сеть, доступ, оргтехника.\n\n"
+            "Пожалуйста, опишите вашу техническую проблему."
+        )
+        return
 
     analysis_id = data.get("analysis_id") if isinstance(data, dict) else None
 

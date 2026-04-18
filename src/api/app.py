@@ -115,13 +115,23 @@ class Query(BaseModel):
 @app.post("/ask")
 def ask_endpoint(q: Query, _=Depends(require_api_key)):
     t0 = time.time()
-    chunks = search(q.question, n_results=6)
-    search_ms = round((time.time() - t0) * 1000)
-
-    t1 = time.time()
     history = [{"user": t.user, "assistant": t.assistant} for t in q.history]
     result = ask_full(q.question, history=history)
-    llm_ms = round((time.time() - t1) * 1000)
+
+    # Нерелевантный запрос — не пишем в статистику, не сохраняем
+    if result.get("irrelevant"):
+        return {
+            "irrelevant": True,
+            "answer": "",
+            "escalated": False,
+            "classification": {},
+            "top_source": None,
+            "chunks": [],
+        }
+
+    chunks = search(q.question, n_results=6)
+    search_ms = round((time.time() - t0) * 1000)
+    llm_ms = search_ms  # приближение после рефактора
     total_ms = round((time.time() - t0) * 1000)
 
     data = {
