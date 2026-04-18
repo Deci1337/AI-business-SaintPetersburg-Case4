@@ -64,7 +64,7 @@ def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> No
 
 def _rating_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton(f"{'⭐' * i}", callback_data=f"rate_{aid}_{i}")
+        InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}")
         for i in range(1, 6)
     ]])
 
@@ -203,7 +203,6 @@ async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     _save_rating(aid, score, p.get("question", ""), p.get("answer", ""))
     _pending_ratings.pop(aid, None)
 
-    stars = "⭐" * score + "☆" * (5 - score)
     thanks = {
         5: "Отлично! Рад помочь.",
         4: "Хорошо, учтём.",
@@ -222,7 +221,7 @@ async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         close_note = ""
 
     await q.message.reply_text(
-        f"{stars} {thanks.get(score, 'Спасибо!')}{close_note}",
+        f"Оценка: {score}/5 — {thanks.get(score, 'Спасибо!')}{close_note}",
         parse_mode=ParseMode.HTML,
     )
 
