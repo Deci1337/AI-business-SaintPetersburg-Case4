@@ -373,12 +373,15 @@ def get_stats():
     timings = [d["timing"]["total_ms"] for d in analyses.values()]
     sources = {}
     priorities = {}
+    task_types = {}
     for d in analyses.values():
         cl = d.get("classification", {})
         svc = cl.get("service", "Другое")
         pri = cl.get("priority", "Средний")
+        tt = cl.get("task_type", "Инцидент")
         sources[svc] = sources.get(svc, 0) + 1
         priorities[pri] = priorities.get(pri, 0) + 1
+        task_types[tt] = task_types.get(tt, 0) + 1
 
     return {
         "total": total,
@@ -391,6 +394,7 @@ def get_stats():
         "max_ms": max(timings),
         "by_service": sources,
         "by_priority": priorities,
+        "by_task_type": task_types,
         "sources": {
             "telegram": sum(1 for d in analyses.values() if d.get("source") == "telegram"),
             "api": sum(1 for d in analyses.values() if d.get("source") != "telegram"),

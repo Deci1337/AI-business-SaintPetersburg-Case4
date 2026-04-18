@@ -54,10 +54,14 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-6">
+    <div class="grid grid-cols-3 gap-6">
       <div>
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По категориям</div>
+        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По сервисам</div>
         <canvas id="serviceChart"></canvas>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По типам обращений</div>
+        <canvas id="taskTypeChart"></canvas>
       </div>
       <div>
         <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">По приоритетам</div>
@@ -416,6 +420,10 @@ function ragInspector() {
           this.$nextTick(() => {
             this.renderBarChart('serviceChart', s.by_service,
               ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#64748b']);
+            if (s.by_task_type) {
+              this.renderBarChart('taskTypeChart', s.by_task_type,
+                ['#ef4444','#f59e0b','#3b82f6','#8b5cf6']);
+            }
             this.renderPriorityChart('priorityChart', s.by_priority);
             this.renderDonutChart('aiDonutChart', s.resolved, s.escalated);
             this.renderWeeklyImpactChart('weeklyImpactChart', this.weeklyStats || s);

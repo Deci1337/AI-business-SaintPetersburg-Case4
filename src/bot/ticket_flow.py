@@ -35,7 +35,7 @@ def _save_ticket(ticket: dict) -> None:
     write_header = not os.path.exists(TICKETS_FILE)
     with open(TICKETS_FILE, "a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=[
-            "id", "created_at", "chat_id", "service", "priority",
+            "id", "created_at", "chat_id", "service", "task_type", "priority",
             "subject", "description",
         ])
         if write_header:
@@ -101,11 +101,13 @@ async def start_ticket_flow(
     classification: dict,
 ) -> None:
     service = classification.get("service", "Другое")
+    task_type = classification.get("task_type", "Инцидент")
     priority = classification.get("priority", "Средний")
 
     context.user_data["ticket"] = {
         "question": question,
         "service": service,
+        "task_type": task_type,
         "priority": priority,
     }
     context.user_data["ticket_state"] = STATE_CLARIFY
@@ -113,6 +115,7 @@ async def start_ticket_flow(
     text = (
         "📋 <b>Создаю заявку.</b> Я уже определил:\n\n"
         f"📂 Сервис: <b>{service}</b>\n"
+        f"🏷️ Тип: <b>{task_type}</b>\n"
         f"{_priority_emoji(priority)} Приоритет: <b>{priority}</b>\n\n"
         "Уточните проблему подробнее или отправьте /skip, "
         "чтобы использовать исходный запрос.\n"
@@ -175,6 +178,7 @@ async def handle_ticket_callback(update: Update, context: ContextTypes.DEFAULT_T
             "created_at": datetime.now().isoformat(),
             "chat_id": update.effective_chat.id,
             "service": ticket.get("service", ""),
+            "task_type": ticket.get("task_type", ""),
             "priority": ticket.get("priority", ""),
             "subject": subject,
             "description": full_desc[:500],
@@ -189,6 +193,7 @@ async def handle_ticket_callback(update: Update, context: ContextTypes.DEFAULT_T
                 question=f"[ЗАЯВКА #{record['id']}] {subject}",
                 answer=(
                     f"Сервис: {record['service']}\n"
+                    f"Тип: {record['task_type']}\n"
                     f"Приоритет: {record['priority']}\n\n"
                     f"{record['description']}"
                 ),
@@ -214,6 +219,7 @@ async def handle_ticket_callback(update: Update, context: ContextTypes.DEFAULT_T
         await q.message.reply_text(
             f"✏️ Опишите проблему заново.\n"
             f"Сервис: <b>{ticket.get('service', '—')}</b> | "
+            f"Тип: <b>{ticket.get('task_type', '—')}</b> | "
             f"Приоритет: <b>{ticket.get('priority', '—')}</b>\n"
             "Или /cancel для отмены.",
             parse_mode=ParseMode.HTML,
@@ -234,6 +240,7 @@ async def _show_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     question = ticket.get("question", "")
     clarification = ticket.get("clarification", question)
     service = ticket.get("service", "Другое")
+    task_type = ticket.get("task_type", "Инцидент")
     priority = ticket.get("priority", "Средний")
 
     subject = await _make_subject(question, clarification)
@@ -251,6 +258,7 @@ async def _show_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "✅ <b>Заявка готова — проверьте:</b>\n\n"
         f"📋 Тема: <i>{subject}</i>\n"
         f"📂 Сервис: <b>{service}</b>\n"
+        f"🏷️ Тип: <b>{task_type}</b>\n"
         f"{_priority_emoji(priority)} Приоритет: <b>{priority}</b>\n"
         f"📝 Описание:\n{full_desc[:400]}"
     )

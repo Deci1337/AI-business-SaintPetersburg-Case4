@@ -53,6 +53,23 @@ class TestClassify:
     def test_priority(self, q, priority):
         assert llm.classify(q)["priority"] == priority
 
+    @pytest.mark.parametrize("q,task_type", [
+        ("Outlook не открывается", "Инцидент"),
+        ("VPN упал, не могу работать", "Инцидент"),
+        ("как настроить подпись в письме", "Консультация"),
+        ("подскажите, где скачать драйвер", "Консультация"),
+        ("нужен доступ к сетевой папке отдела", "Запрос"),
+        ("установить Photoshop на ноутбук", "Запрос"),
+        ("принтер каждый день зависает, регулярно приходится перезагружать", "Проблема"),
+        ("постоянно пропадает интернет", "Проблема"),
+    ])
+    def test_task_type(self, q, task_type):
+        assert llm.classify(q)["task_type"] == task_type
+
+    def test_classify_returns_three_fields(self):
+        result = llm.classify("Outlook не открывается")
+        assert set(result.keys()) == {"service", "task_type", "priority"}
+
 
 class TestIsEscalated:
     def test_low_score_triggers_escalation(self):
