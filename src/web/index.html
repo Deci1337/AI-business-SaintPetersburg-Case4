@@ -33,31 +33,6 @@
 
 <div class="max-w-7xl mx-auto px-6 py-6 space-y-5">
 
-  <!-- Статистика реальной БД -->
-  <div x-show="dbStats" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="text-sm font-medium text-gray-700 mb-1">Статистика базы — последние 12 месяцев</div>
-    <div class="text-xs text-gray-400 mb-5">Данные из MSSQL сервис-деска «Балтийский Берег»</div>
-
-    <div class="grid grid-cols-4 gap-4 mb-6">
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-gray-900" x-text="dbStats?.total_tasks?.toLocaleString('ru-RU')"></div>
-        <div class="text-xs text-gray-400 mt-1">Всего заявок</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-emerald-600" x-text="dbStats?.closed_tasks?.toLocaleString('ru-RU')"></div>
-        <div class="text-xs text-gray-400 mt-1">Закрыто</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-red-500" x-text="dbStats?.overdue_tasks?.toLocaleString('ru-RU')"></div>
-        <div class="text-xs text-gray-400 mt-1">Просрочено</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-blue-600" x-text="dbStats?.avg_resolution_hours ? dbStats.avg_resolution_hours + ' ч' : '—'"></div>
-        <div class="text-xs text-gray-400 mt-1">Среднее время решения</div>
-      </div>
-    </div>
-
-  </div>
 
   <!-- Статистика сессии -->
   <div x-show="stats && stats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
