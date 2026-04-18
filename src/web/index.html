@@ -265,6 +265,96 @@
     </div>
   </div>
 
+  <!-- Корпоративное обучение — пробелы в знаниях -->
+  <div x-show="knowledgeGaps && knowledgeGaps.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="flex items-start justify-between mb-1">
+      <div>
+        <div class="text-sm font-medium text-gray-700">Корпоративное обучение</div>
+        <div class="text-xs text-gray-400 mt-0.5">Топ тем, в которых сотрудники нуждаются в обучении</div>
+      </div>
+      <div class="flex gap-1 text-xs border border-gray-200 rounded-md overflow-hidden flex-shrink-0">
+        <button @click="setGapsPeriod('day')"   class="px-3 py-1 transition-colors" :class="gapsPeriod==='day'   ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">День</button>
+        <button @click="setGapsPeriod('week')"  class="px-3 py-1 transition-colors" :class="gapsPeriod==='week'  ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">Неделя</button>
+        <button @click="setGapsPeriod('month')" class="px-3 py-1 transition-colors" :class="gapsPeriod==='month' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">Месяц</button>
+        <button @click="setGapsPeriod('all')"   class="px-3 py-1 transition-colors" :class="gapsPeriod==='all'   ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">Всё время</button>
+      </div>
+    </div>
+
+    <div class="text-xs text-gray-400 mb-5">
+      За период: <span class="font-medium text-gray-600" x-text="knowledgeGaps?.total + ' обращений'"></span> —
+      по частоте запросов определяем темы для корпоративных тренингов
+    </div>
+
+    <div class="space-y-3">
+      <template x-for="(cat, idx) in knowledgeGaps?.categories" :key="cat.service">
+        <div class="border border-gray-100 rounded-lg overflow-hidden">
+
+          <!-- Строка категории -->
+          <div class="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
+               @click="cat.expanded = !cat.expanded">
+
+            <!-- Ранг -->
+            <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                 :class="idx === 0 ? 'bg-red-100 text-red-600' : idx === 1 ? 'bg-orange-100 text-orange-600' : idx === 2 ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-500'"
+                 x-text="idx + 1">
+            </div>
+
+            <!-- Название темы -->
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-800" x-text="cat.service"></div>
+              <div class="flex items-center gap-2 mt-1">
+                <!-- Прогресс-бар -->
+                <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden" style="max-width:200px">
+                  <div class="h-full rounded-full transition-all"
+                       :class="idx === 0 ? 'bg-red-400' : idx === 1 ? 'bg-orange-400' : idx === 2 ? 'bg-yellow-400' : 'bg-blue-300'"
+                       :style="`width:${cat.share_pct}%`"></div>
+                </div>
+                <span class="text-xs text-gray-400" x-text="cat.share_pct + '% обращений'"></span>
+              </div>
+            </div>
+
+            <!-- Счётчик -->
+            <div class="text-right flex-shrink-0">
+              <div class="text-lg font-bold text-gray-800" x-text="cat.count"></div>
+              <div class="text-xs text-gray-400">вопросов</div>
+            </div>
+
+            <!-- Рекомендация -->
+            <div class="flex-shrink-0 hidden md:block">
+              <span class="text-xs px-2 py-1 rounded-md font-medium"
+                    :class="idx < 3 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gray-50 text-gray-500 border border-gray-100'"
+                    x-text="idx < 3 ? '⚠ Нужен тренинг' : 'Мониторинг'">
+              </span>
+            </div>
+
+            <!-- Раскрытие -->
+            <svg class="w-4 h-4 text-gray-400 flex-shrink-0 transition-transform" :class="cat.expanded ? 'rotate-180' : ''"
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+
+          <!-- Раскрытый список вопросов -->
+          <div x-show="cat.expanded" x-cloak class="border-t border-gray-100 bg-slate-50 px-4 py-3">
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Реальные вопросы сотрудников</div>
+            <ul class="space-y-1.5">
+              <template x-for="q in cat.top_questions" :key="q">
+                <li class="flex items-start gap-2 text-sm text-gray-600">
+                  <span class="text-gray-300 mt-0.5 flex-shrink-0">—</span>
+                  <span x-text="q"></span>
+                </li>
+              </template>
+            </ul>
+            <div class="mt-3 pt-3 border-t border-gray-200 text-xs text-blue-600 font-medium">
+              💡 Рекомендация: провести обучение по теме «<span x-text="cat.service"></span>» для сотрудников первой линии
+            </div>
+          </div>
+
+        </div>
+      </template>
+    </div>
+  </div>
+
   <!-- Список запросов -->
   <div x-show="allAnalyses.length > 0" x-cloak class="bg-white rounded-lg border border-gray-200 overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -331,12 +421,14 @@ function ragInspector() {
     dbStats: null,
     ratingsStats: null,
     ratingPeriod: 'day',
+    gapsPeriod: 'month',
+    knowledgeGaps: null,
     weights: {"1":-2,"2":-1,"3":0,"4":1,"5":2},
     charts: {},
 
     async init() {
       try { this.apiOk = (await fetch('/health')).ok; } catch { this.apiOk = false; }
-      await Promise.all([this.loadAnalysesList(), this.loadDbStats(), this.loadRatings()]);
+      await Promise.all([this.loadAnalysesList(), this.loadDbStats(), this.loadRatings(), this.loadKnowledgeGaps()]);
     },
 
     async loadAnalysesList() {
@@ -384,6 +476,21 @@ function ragInspector() {
         }
         if (rw.ok) this.weights = await rw.json();
       } catch {}
+    },
+
+    async loadKnowledgeGaps() {
+      try {
+        const r = await fetch(`/stats/knowledge-gaps?period=${this.gapsPeriod}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        data.categories = data.categories.map(c => ({ ...c, expanded: false }));
+        this.knowledgeGaps = data;
+      } catch {}
+    },
+
+    async setGapsPeriod(p) {
+      this.gapsPeriod = p;
+      await this.loadKnowledgeGaps();
     },
 
     async setRatingPeriod(p) {

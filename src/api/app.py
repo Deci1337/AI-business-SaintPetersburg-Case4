@@ -146,6 +146,52 @@ def get_weekly_stats():
     }
 
 
+@app.get("/stats/knowledge-gaps")
+def knowledge_gaps(period: str = "month", top_n: int = 7):
+    """Топ категорий пробелов в знаниях сотрудников за период (day/week/month/all).
+    Для каждой категории — число обращений и топ конкретных вопросов."""
+    from datetime import timedelta
+    from collections import defaultdict
+
+    period_days = {"day": 1, "week": 7, "month": 30, "all": None}
+    days = period_days.get(period, 30)
+    if days:
+        cutoff = datetime.now() - timedelta(days=days)
+        subset = [d for d in analyses.values() if datetime.fromisoformat(d["created_at"]) >= cutoff]
+    else:
+        subset = list(analyses.values())
+
+    if not subset:
+        return {"period": period, "total": 0, "categories": []}
+
+    # Группируем по сервис-категории
+    cat_counts: dict[str, int] = defaultdict(int)
+    cat_questions: dict[str, list[str]] = defaultdict(list)
+
+    for d in subset:
+        svc = d.get("classification", {}).get("service", "Другое")
+        cat_counts[svc] += 1
+        q = d.get("question", "").strip()
+        if q and len(cat_questions[svc]) < 5:
+            cat_questions[svc].append(q)
+
+    sorted_cats = sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
+
+    return {
+        "period": period,
+        "total": len(subset),
+        "categories": [
+            {
+                "service": svc,
+                "count": cnt,
+                "share_pct": round(cnt / len(subset) * 100, 1),
+                "top_questions": cat_questions[svc],
+            }
+            for svc, cnt in sorted_cats
+        ],
+    }
+
+
 @app.get("/stats")
 def get_stats():
     total = len(analyses)
