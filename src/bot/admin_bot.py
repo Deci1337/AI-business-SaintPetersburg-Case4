@@ -70,30 +70,22 @@ def _is_super_admin(user_id: int) -> bool:
 
 # --- Keyboards ---
 
-def _ratings_keyboard(aid: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
-    ])
-
-
 def _escalation_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
-        [InlineKeyboardButton("🚨 Взять вопрос (эскалация)", callback_data=f"claim_{aid}")],
+        [InlineKeyboardButton("🚨 Взять вопрос", callback_data=f"claim_{aid}")],
     ])
 
 
-def _claimed_keyboard(aid: str, admin_name: str) -> InlineKeyboardMarkup:
+def _claimed_keyboard(admin_name: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}") for i in range(1, 6)],
         [InlineKeyboardButton(f"✅ Взято: @{admin_name}", callback_data="noop")],
     ])
 
 
 def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) -> str:
-    status = "Эскалация — требует ответа оператора" if escalated else "Автоответ"
+    status = "🚨 Эскалация — требует ответа оператора" if escalated else "✅ Автоответ AI"
     truncated = answer[:600] + ("..." if len(answer) > 600 else "")
-    return "\n".join([
+    lines = [
         f"Запрос #{analysis_id[:8]}",
         "",
         f"Вопрос: {question}",
@@ -104,9 +96,10 @@ def _format_card(analysis_id: str, question: str, answer: str, escalated: bool) 
         f"Анализ: {os.getenv('API_PUBLIC_URL', 'http://localhost:8001')}/analysis/{analysis_id}",
         "",
         f"Статус: {status}",
-        "",
-        "Оцените ответ модели (1 — плохо, 5 — отлично):",
-    ])
+    ]
+    if escalated:
+        lines.append("\nНажмите «Взять вопрос», чтобы ответить сотруднику вручную.")
+    return "\n".join(lines)
 
 
 # --- Notify ---
@@ -129,7 +122,7 @@ async def notify_admins(
     }
 
     text = _format_card(analysis_id, question, answer, escalated)
-    keyboard = _escalation_keyboard(analysis_id) if escalated else _ratings_keyboard(analysis_id)
+    keyboard = _escalation_keyboard(analysis_id) if escalated else None
 
     bot = Bot(token=ADMIN_BOT_TOKEN)
     for chat_id in admin_ids:
@@ -274,16 +267,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer("Нет доступа.", show_alert=True)
         return
 
-    if data.startswith("rate_"):
-        _, aid, score_str = data.split("_", 2)
-        score = int(score_str)
-        p = pending.get(aid, {})
-        _save_rating(aid, score, p.get("question", ""), p.get("answer", ""))
-        await query.edit_message_reply_markup(reply_markup=None)
-        await query.message.reply_text(f"Оценка {score}/5 сохранена. Спасибо!")
-        await query.message.reply_text(_format_model_feedback(score))
-
-    elif data.startswith("claim_"):
+    if data.startswith("claim_"):
         _, aid = data.split("_", 1)
         admin_id = query.from_user.id
         admin_name = query.from_user.username or query.from_user.first_name
@@ -293,8 +277,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
 
         claimed[aid] = admin_id
-        new_kb = _claimed_keyboard(aid, admin_name)
-        await query.edit_message_reply_markup(reply_markup=new_kb)
+        await query.edit_message_reply_markup(reply_markup=_claimed_keyboard(admin_name))
 
         other_admins = [SUPER_ADMIN_ID] + _load_admins() if SUPER_ADMIN_ID else _load_admins()
         other_admins = [a for a in other_admins if a != admin_id]
