@@ -64,7 +64,13 @@ async def _make_subject(question: str, clarification: str) -> str:
             )
             answer = r.json().get("answer", "").strip()
             subject = answer.split(".")[0].strip()[:120]
-            return subject if len(subject) > 5 else combined[:80]
+            # LLM иногда отвечает сигнальными токенами — это не тема
+            bad = {"нужен_специалист", "не знаю", ""}
+            if not subject or subject.lower() in bad or len(subject) < 5:
+                return combined[:80]
+            if "нужен_специалист" in subject.lower():
+                return combined[:80]
+            return subject
     except Exception as e:
         log.warning(f"_make_subject failed: {e}")
         return combined[:80]

@@ -148,6 +148,17 @@ def ask_endpoint(q: Query, _=Depends(require_api_key)):
             "chunks": [],
         }
 
+    # Слишком общий запрос — просим уточнение, ничего не логируем
+    if result.get("clarify"):
+        return {
+            "clarify": True,
+            "answer": result["answer"],
+            "escalated": False,
+            "classification": result.get("classification", {}),
+            "top_source": None,
+            "chunks": [],
+        }
+
     chunks = search(q.question, n_results=6)
     search_ms = round((time.time() - t0) * 1000)
     llm_ms = search_ms  # приближение после рефактора

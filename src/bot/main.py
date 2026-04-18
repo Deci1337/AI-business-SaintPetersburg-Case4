@@ -274,6 +274,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Слишком общий запрос — просим уточнение, не эскалируем и не создаём заявку
+    if data.get("clarify"):
+        await update.message.reply_text(answer)
+        return
+
     analysis_id = data.get("analysis_id") if isinstance(data, dict) else None
 
     if escalated:

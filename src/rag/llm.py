@@ -108,8 +108,8 @@ def _is_escalated(top_score: float, answer: str) -> bool:
     # Явный сигнал от LLM — ответ ровно НУЖЕН_СПЕЦИАЛИСТ
     if a == "нужен_специалист" or a.startswith("нужен_специалист"):
         return True
-    # Низкий score — реально мало релевантности
-    if top_score < 0.45:
+    # Совсем отсутствие контекста — дубль страховки (основной cutoff в ask_full)
+    if top_score < 0.3:
         return True
     # Явное "не знаю" в коротком ответе
     if "не знаю" in a and len(a) < 120:
@@ -249,6 +249,25 @@ def _build_history_block(history: list[dict]) -> str:
     return "\n".join(lines)
 
 
+_VAGUE_PATTERNS = [
+    "помогите", "помоги", "нужна помощь", "подскажите",
+    "не работает", "не могу", "проблема",
+]
+
+
+def _is_vague(query: str, history_len: int) -> bool:
+    """Слишком общий запрос без конкретики — просим уточнение вместо эскалации.
+    Срабатывает только в начале диалога (без истории)."""
+    if history_len > 0:
+        return False
+    q = query.lower().strip()
+    words = q.split()
+    if len(words) > 7:
+        return False
+    # Короткий запрос + общая фраза без конкретной детали
+    return any(p in q for p in _VAGUE_PATTERNS)
+
+
 def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
     """Полный результат: ответ + эскалация + классификация + топ-чанки.
 
@@ -262,6 +281,22 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
             "irrelevant": True,
             "classification": {},
             "top_source": None,
+        }
+
+    # Слишком общий запрос в начале диалога — просим уточнить, не эскалируем
+    if _is_vague(user_query, len(history or [])):
+        cl = classify(user_query)
+        return {
+            "answer": (
+                "Уточните, пожалуйста, детали: что именно не работает, "
+                "какое сообщение об ошибке видите, когда началось? "
+                "Чем подробнее — тем быстрее помогу."
+            ),
+            "escalated": False,
+            "irrelevant": False,
+            "classification": cl,
+            "top_source": None,
+            "clarify": True,
         }
 
     if check_wants_operator(user_query):
@@ -280,7 +315,7 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
     search_query = extract_query(user_query)
     results = search(search_query, n_results=6)
 
-    if not results or results[0]["score"] < 0.4:
+    if not results or results[0]["score"] < 0.3:
         cl = classify(user_query)
         if cl["service"] == "Другое":
             cl["service"] = classify_topic(user_query)
