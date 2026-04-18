@@ -25,9 +25,14 @@
       <div class="text-xs text-gray-400 mt-0.5">AI Service Desk — мониторинг и статистика</div>
     </div>
   </div>
-  <div class="flex items-center gap-2">
-    <div class="w-2 h-2 rounded-full" :class="apiOk ? 'bg-emerald-400' : 'bg-red-400'"></div>
-    <span class="text-xs text-gray-500" x-text="apiOk ? 'API онлайн' : 'API недоступен'"></span>
+  <div class="flex items-center gap-4">
+    <div x-show="indexStatus" class="text-xs text-gray-400">
+      🗂 Индекс: <span class="text-gray-600 font-medium" x-text="indexStatus?.last_updated"></span>
+    </div>
+    <div class="flex items-center gap-2">
+      <div class="w-2 h-2 rounded-full" :class="apiOk ? 'bg-emerald-400' : 'bg-red-400'"></div>
+      <span class="text-xs text-gray-500" x-text="apiOk ? 'API онлайн' : 'API недоступен'"></span>
+    </div>
   </div>
 </header>
 
@@ -399,12 +404,20 @@ function ragInspector() {
     ratingPeriod: 'day',
     gapsPeriod: 'month',
     knowledgeGaps: null,
+    indexStatus: null,
     weights: {"1":-2,"2":-1,"3":0,"4":1,"5":2},
     charts: {},
 
     async init() {
       try { this.apiOk = (await fetch('/health')).ok; } catch { this.apiOk = false; }
-      await Promise.all([this.loadAnalysesList(), this.loadDbStats(), this.loadRatings(), this.loadKnowledgeGaps()]);
+      await Promise.all([this.loadAnalysesList(), this.loadDbStats(), this.loadRatings(), this.loadKnowledgeGaps(), this.loadIndexStatus()]);
+    },
+
+    async loadIndexStatus() {
+      try {
+        const r = await fetch('/index-status');
+        if (r.ok) this.indexStatus = await r.json();
+      } catch {}
     },
 
     async loadAnalysesList() {

@@ -10,6 +10,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.constants import ParseMode, ChatAction
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from src.bot.logger import log_dialog
+from src.bot.ticket_flow import start_ticket_flow, handle_ticket_message, handle_ticket_callback
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -104,6 +105,10 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Если активен флоу создания заявки — передаём управление ему
+    if await handle_ticket_message(update, context):
+        return
+
     query = update.message.text
     chat_id = update.effective_chat.id
     user_id = str(update.effective_user.id)
@@ -142,12 +147,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if escalated:
         # Диалог закрыт — очищаем контекст
         _clear_history(chat_id)
-        text = (
-            "Ваш запрос передан специалисту поддержки. Ожидайте ответа.\n\n"
-            "<i>💬 Диалог закрыт — вопрос передан оператору. "
-            "Для нового обращения просто напишите сообщение.</i>"
+        await update.message.reply_text(
+            "К сожалению, точного ответа в базе знаний не нашлось.\n\n"
+            "<i>💬 Диалог закрыт. Создаю заявку в поддержку...</i>",
+            parse_mode=ParseMode.HTML,
         )
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await start_ticket_flow(update, context, query, classification)
     else:
         # Сохраняем пару в историю
         _push_history(chat_id, query, answer)
@@ -182,6 +187,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Ticket flow callbacks
+    if update.callback_query.data.startswith("ticket_"):
+        await handle_ticket_callback(update, context)
+        return
+
     q = update.callback_query
     await q.answer()
     parts = q.data.split("_", 2)
@@ -223,6 +233,7 @@ def main():
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("new", new_cmd))
     app.add_handler(CommandHandler("help", help_cmd))

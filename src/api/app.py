@@ -7,6 +7,7 @@ import time
 import traceback
 import uuid
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 from datetime import datetime
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
@@ -14,9 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from src.rag.llm import ask_full
 from src.rag.retriever import search
 from src.rag.db import get_connection
+from src.rag.update_index import run_incremental_update, get_last_index_time
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -32,7 +36,25 @@ def require_api_key(authorization: str | None = Header(default=None)):
     if authorization != expected:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-app = FastAPI(title="BaltBereg Service Desk API", version="1.0.0")
+scheduler = AsyncIOScheduler()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler.add_job(
+        run_incremental_update,
+        CronTrigger(hour=3, minute=0),
+        id="incremental_index",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.start()
+    log.info("APScheduler запущен — обновление индекса каждые сутки в 03:00")
+    yield
+    scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="BaltBereg Service Desk API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -445,6 +467,20 @@ def ratings_stats():
         "avg_score": round(sum(rows) / len(rows), 2),
         "distribution": {str(i): rows.count(i) for i in range(1, 6)},
     }
+
+
+@app.get("/index-status")
+def index_status():
+    """Дата последнего обновления ChromaDB-индекса."""
+    return {"last_updated": get_last_index_time()}
+
+
+@app.post("/index-update", dependencies=[Depends(require_api_key)])
+async def trigger_index_update():
+    """Ручной запуск инкрементального обновления индекса (для отладки)."""
+    import asyncio
+    asyncio.create_task(asyncio.to_thread(run_incremental_update))
+    return {"status": "started"}
 
 
 @app.get("/health")
