@@ -150,7 +150,10 @@ def ask_endpoint(q: Query, _=Depends(require_api_key)):
         "chunks": [
             {
                 "rank": i + 1,
+                "id": c.get("id", ""),
                 "score": round(c["score"], 3),
+                "base_score": round(c.get("base_score", c["score"]), 3),
+                "boost": round(c.get("boost", 0.0), 4),
                 "source": c["meta"].get("source", ""),
                 "title": c["meta"].get("title", "")[:80],
                 "service": c["meta"].get("service", ""),
@@ -432,7 +435,36 @@ def save_rating(r: Rating):
             datetime.now().isoformat(), r.analysis_id, r.score,
             r.question[:200], r.answer[:200],
         ])
+
+    # Применяем обучение: корректируем веса чанков, участвовавших в ответе
+    try:
+        from src.rag.retriever import apply_feedback
+        weights = {1: -0.05, 2: -0.025, 3: 0.0, 4: 0.025, 5: 0.05}
+        delta = weights.get(r.score, 0.0)
+        analysis = analyses.get(r.analysis_id)
+        if analysis and delta != 0:
+            # Берём топ-3 чанка (они сильнее всего повлияли на ответ)
+            chunk_ids = [c.get("id") for c in analysis.get("chunks", [])[:3] if c.get("id")]
+            if chunk_ids:
+                apply_feedback(chunk_ids, delta)
+                log.info(f"rating {r.score}★: applied {delta:+.3f} to {len(chunk_ids)} chunks")
+    except Exception as e:
+        log.warning(f"apply_feedback error: {e}")
+
     return {"ok": True}
+
+
+@app.get("/chunk-adjustments")
+def chunk_adjustments():
+    """Возвращает все текущие корректировки весов чанков (для мониторинга обучения)."""
+    from src.rag.retriever import load_adjustments
+    adj = load_adjustments()
+    sorted_items = sorted(adj.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "total": len(adj),
+        "boosted": [{"id": k, "delta": v} for k, v in sorted_items if v > 0][:20],
+        "demoted": [{"id": k, "delta": v} for k, v in sorted_items if v < 0][-20:],
+    }
 
 
 @app.get("/weights")

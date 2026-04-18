@@ -1,3 +1,5 @@
+import json
+import os
 import time
 import chromadb
 from .indexer import CHROMA_PATH, get_model
@@ -6,6 +8,8 @@ _client = None
 _kb_col = None
 _ticket_col = None
 _expenses_col = None
+
+ADJUSTMENTS_FILE = "data/chunk_adjustments.json"
 
 
 def get_collections():
@@ -18,18 +22,60 @@ def get_collections():
     return _kb_col, _ticket_col, _expenses_col
 
 
+def load_adjustments() -> dict[str, float]:
+    if not os.path.exists(ADJUSTMENTS_FILE):
+        return {}
+    try:
+        with open(ADJUSTMENTS_FILE, encoding="utf-8") as f:
+            return {k: float(v) for k, v in json.load(f).items()}
+    except Exception:
+        return {}
+
+
+def save_adjustments(adj: dict[str, float]) -> None:
+    os.makedirs("data", exist_ok=True)
+    tmp = ADJUSTMENTS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(adj, f, ensure_ascii=False)
+    os.replace(tmp, ADJUSTMENTS_FILE)
+
+
+def apply_feedback(chunk_ids: list[str], delta: float) -> None:
+    """Применяет обучающую коррекцию к чанкам. delta в диапазоне примерно [-0.1, +0.1]."""
+    if not chunk_ids or delta == 0:
+        return
+    adj = load_adjustments()
+    for cid in chunk_ids:
+        cur = adj.get(cid, 0.0)
+        new = max(-0.3, min(0.3, cur + delta))  # cap чтобы не ушло в космос
+        adj[cid] = round(new, 4)
+    save_adjustments(adj)
+
+
 def search(query: str, n_results: int = 5) -> list[dict]:
     t0 = time.time()
     model = get_model()
     embedding = model.encode([query]).tolist()[0]
     kb_col, ticket_col, expenses_col = get_collections()
+    adj = load_adjustments()
 
     results = []
     for col in [kb_col, ticket_col, expenses_col]:
         try:
             r = col.query(query_embeddings=[embedding], n_results=n_results)
-            for doc, meta, dist in zip(r["documents"][0], r["metadatas"][0], r["distances"][0]):
-                results.append({"text": doc, "meta": meta, "score": 1 - dist})
+            for cid, doc, meta, dist in zip(
+                r["ids"][0], r["documents"][0], r["metadatas"][0], r["distances"][0]
+            ):
+                base = 1 - dist
+                boost = adj.get(cid, 0.0)
+                results.append({
+                    "id": cid,
+                    "text": doc,
+                    "meta": meta,
+                    "score": base + boost,
+                    "base_score": base,
+                    "boost": boost,
+                })
         except Exception:
             pass
 
