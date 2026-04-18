@@ -21,10 +21,12 @@ WEIGHTS_FILE = "data/weights.json"
 
 DEFAULT_WEIGHTS = {1: -2, 2: -1, 3: 0, 4: 1, 5: 2}
 
-# claimed[analysis_id] = admin_user_id
+# aid -> admin_user_id (кто взял)
 claimed: dict = {}
-# pending[analysis_id] = {"user_chat_id": int, "question": str, "answer": str}
+# aid -> {"user_chat_id": int, "question": str, "answer": str, "history": list[dict]}
 pending: dict = {}
+# aid -> {admin_chat_id: message_id} — для обновления кнопок у всех
+escalation_messages: dict[str, dict[int, int]] = {}
 
 _app = None
 
@@ -68,19 +70,41 @@ def _is_super_admin(user_id: int) -> bool:
     return user_id == SUPER_ADMIN_ID
 
 
+def _all_admin_ids() -> list[int]:
+    admins = _load_admins()
+    if SUPER_ADMIN_ID and SUPER_ADMIN_ID not in admins:
+        return [SUPER_ADMIN_ID] + admins
+    return admins
+
+
 # --- Keyboards ---
 
 def _escalation_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🚨 Взять вопрос", callback_data=f"claim_{aid}")],
+        [InlineKeyboardButton("📋 История диалога", callback_data=f"history_{aid}")],
+        [InlineKeyboardButton("🚨 Взять диалог", callback_data=f"claim_{aid}")],
     ])
 
 
-def _claimed_keyboard(admin_name: str) -> InlineKeyboardMarkup:
+def _claimed_keyboard(aid: str, admin_name: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"✅ Взято: @{admin_name}", callback_data="noop")],
     ])
 
+
+def _active_chat_keyboard(aid: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔴 Закрыть запрос", callback_data=f"closeticket_{aid}")],
+    ])
+
+
+def _canceled_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Отменён сотрудником", callback_data="noop")],
+    ])
+
+
+# --- Format helpers ---
 
 def _format_similar_solutions(chunks: list) -> str:
     expense_chunks = [c for c in chunks if c.get("source") == "expense"][:3]
@@ -97,28 +121,23 @@ def _format_similar_solutions(chunks: list) -> str:
     return "\n".join(lines)
 
 
-def _format_card(analysis_id: str, question: str, answer: str, escalated: bool, chunks: list | None = None) -> str:
-    status = "🚨 Эскалация — требует ответа оператора" if escalated else "✅ Автоответ AI"
+def _format_card(analysis_id: str, question: str, answer: str, chunks: list | None = None) -> str:
     truncated = answer[:600] + ("..." if len(answer) > 600 else "")
     lines = [
-        f"Запрос #{analysis_id[:8]}",
+        f"🚨 Эскалация — запрос #{analysis_id[:8]}",
         "",
         f"Вопрос: {question}",
         "",
-        "Ответ модели:",
+        "Последний ответ AI:",
         truncated,
         "",
         f"Анализ: {os.getenv('API_PUBLIC_URL', 'http://localhost:8001')}/analysis/{analysis_id}",
-        "",
-        f"Статус: {status}",
     ]
-    if escalated and chunks:
+    if chunks:
         similar = _format_similar_solutions(chunks)
         if similar:
             lines.append(similar)
-        lines.append("\nНажмите «Взять вопрос», чтобы ответить сотруднику вручную.")
-    elif escalated:
-        lines.append("\nНажмите «Взять вопрос», чтобы ответить сотруднику вручную.")
+    lines.append("\nНажмите «Взять диалог», чтобы ответить сотруднику.")
     return "\n".join(lines)
 
 
@@ -131,8 +150,9 @@ async def notify_admins(
     escalated: bool,
     user_chat_id: int,
     chunks: list | None = None,
+    dialog_history: list[dict] | None = None,
 ) -> None:
-    admin_ids = [SUPER_ADMIN_ID] + _load_admins() if SUPER_ADMIN_ID else _load_admins()
+    admin_ids = _all_admin_ids()
     if not admin_ids or not ADMIN_BOT_TOKEN:
         return
 
@@ -140,17 +160,50 @@ async def notify_admins(
         "user_chat_id": user_chat_id,
         "question": question,
         "answer": answer,
+        "history": dialog_history or [],
     }
+    escalation_messages[analysis_id] = {}
 
-    text = _format_card(analysis_id, question, answer, escalated, chunks or [])
+    text = _format_card(analysis_id, question, answer, chunks or [])
     keyboard = _escalation_keyboard(analysis_id) if escalated else None
 
     bot = Bot(token=ADMIN_BOT_TOKEN)
     for chat_id in admin_ids:
         try:
-            await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
+            msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
+            escalation_messages[analysis_id][chat_id] = msg.message_id
         except Exception as e:
             logging.error(f"notify_admins: chat_id={chat_id} error={e}")
+
+
+async def user_canceled_request(analysis_id: str) -> None:
+    """Уведомляет всех админов, что сотрудник сам решил вопрос."""
+    if not ADMIN_BOT_TOKEN:
+        return
+
+    bot = Bot(token=ADMIN_BOT_TOKEN)
+    admin_ids = _all_admin_ids()
+    msg_map = escalation_messages.get(analysis_id, {})
+
+    for chat_id in admin_ids:
+        msg_id = msg_map.get(chat_id)
+        try:
+            if msg_id:
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=msg_id,
+                    reply_markup=_canceled_keyboard(),
+                )
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ Запрос #{analysis_id[:8]} отменён сотрудником — вопрос решён самостоятельно.",
+            )
+        except Exception as e:
+            logging.warning(f"user_canceled_request: chat_id={chat_id} error={e}")
+
+    claimed.pop(analysis_id, None)
+    pending.pop(analysis_id, None)
+    escalation_messages.pop(analysis_id, None)
 
 
 # --- Ratings ---
@@ -172,37 +225,30 @@ def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> No
 def _format_model_feedback(score: int) -> str:
     stars = "⭐" * score + "☆" * (5 - score)
     if score == 5:
-        action = "усилить"
-        weight_delta = "+2%"
+        action, weight_delta = "усилить", "+2%"
         detail = "Ответ признан эталонным. Похожие формулировки будут использоваться чаще при поиске в базе знаний."
         trend = "📈 Точность по данной теме: растёт"
     elif score == 4:
-        action = "закрепить"
-        weight_delta = "+1%"
+        action, weight_delta = "закрепить", "+1%"
         detail = "Ответ хороший. Модель запомнит этот паттерн как предпочтительный."
         trend = "📈 Точность по данной теме: растёт"
     elif score == 3:
-        action = "не менять"
-        weight_delta = "0%"
+        action, weight_delta = "не менять", "0%"
         detail = "Нейтральная оценка. Модель сохраняет текущее поведение без корректировок."
         trend = "➡️ Точность по данной теме: стабильна"
     elif score == 2:
-        action = "скорректировать"
-        weight_delta = "−1%"
+        action, weight_delta = "скорректировать", "−1%"
         detail = "Ответ неудовлетворительный. Приоритет источников по этой теме будет снижен."
         trend = "📉 Точность по данной теме: корректируется"
     else:
-        action = "пересмотреть"
-        weight_delta = "−2%"
+        action, weight_delta = "пересмотреть", "−2%"
         detail = "Ответ ошибочный. Модель снизит уверенность по данной категории запросов."
         trend = "📉 Точность по данной теме: требует доработки"
 
     return (
-        f"🤖 Реакция модели на оценку {stars}\n"
-        f"\n"
+        f"🤖 Реакция модели на оценку {stars}\n\n"
         f"Действие: {action} веса источников ({weight_delta})\n"
-        f"{detail}\n"
-        f"\n"
+        f"{detail}\n\n"
         f"{trend}\n"
         f"📊 Оценка учтена в общей статистике качества."
     )
@@ -288,39 +334,124 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer("Нет доступа.", show_alert=True)
         return
 
+    if data == "noop":
+        return
+
+    # Показать историю диалога
+    if data.startswith("history_"):
+        _, aid = data.split("_", 1)
+        p = pending.get(aid)
+        if not p:
+            await query.answer("История недоступна.", show_alert=True)
+            return
+        history = p.get("history", [])
+        lines = [f"📋 История диалога #{aid[:8]}:", ""]
+        if history:
+            for turn in history:
+                lines.append(f"👤 Сотрудник: {turn.get('user', '')}")
+                lines.append(f"🤖 AI: {turn.get('assistant', '')[:300]}")
+                lines.append("")
+        lines.append(f"👤 Итоговый вопрос: {p.get('question', '')}")
+        await query.message.reply_text("\n".join(lines)[:4000])
+        return
+
+    # Взять диалог
     if data.startswith("claim_"):
         _, aid = data.split("_", 1)
         admin_id = query.from_user.id
         admin_name = query.from_user.username or query.from_user.first_name
 
         if aid in claimed:
-            await query.answer("Этот вопрос уже взят другим оператором.", show_alert=True)
+            await query.answer("Этот запрос уже взят другим оператором.", show_alert=True)
             return
 
         claimed[aid] = admin_id
-        await query.edit_message_reply_markup(reply_markup=_claimed_keyboard(admin_name))
+        context.user_data["active_aid"] = aid
 
-        other_admins = [SUPER_ADMIN_ID] + _load_admins() if SUPER_ADMIN_ID else _load_admins()
-        other_admins = [a for a in other_admins if a != admin_id]
-        if other_admins:
-            bot = Bot(token=ADMIN_BOT_TOKEN)
-            for other_id in other_admins:
-                try:
-                    await bot.send_message(
-                        chat_id=other_id,
-                        text=f"ℹ️ Вопрос #{aid[:8]} взят оператором @{admin_name}.",
-                    )
-                except Exception:
-                    pass
+        # Обновляем кнопку у всех админов
+        bot = Bot(token=ADMIN_BOT_TOKEN)
+        msg_map = escalation_messages.get(aid, {})
+        for chat_id, msg_id in msg_map.items():
+            try:
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=msg_id,
+                    reply_markup=_claimed_keyboard(aid, admin_name),
+                )
+            except Exception:
+                pass
+
+        # Уведомляем других
+        other_admins = [a for a in _all_admin_ids() if a != admin_id]
+        for other_id in other_admins:
+            try:
+                await bot.send_message(
+                    chat_id=other_id,
+                    text=f"ℹ️ Запрос #{aid[:8]} взят оператором @{admin_name}.",
+                )
+            except Exception:
+                pass
+
+        # Уведомляем сотрудника
+        p = pending.get(aid, {})
+        if p.get("user_chat_id"):
+            main_bot = Bot(token=MAIN_BOT_TOKEN)
+            try:
+                from src.bot.main import _waiting_operator
+                _waiting_operator[p["user_chat_id"]] = aid
+                await main_bot.send_message(
+                    chat_id=p["user_chat_id"],
+                    text="👨‍💼 Оператор подключился к вашему запросу. Ожидайте ответа.\n\nЕсли вопрос уже решён:",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("✅ Отмена, уже решил", callback_data=f"usercanceled_{aid}"),
+                    ]]),
+                )
+            except Exception as e:
+                logging.warning(f"notify user about claim: {e}")
 
         await query.message.reply_text(
-            f"Вы взяли вопрос #{aid[:8]}.\n"
-            f"Напишите ответ следующим сообщением — он будет переслан пользователю."
+            f"✅ Вы взяли запрос #{aid[:8]}.\n"
+            "Пишите сообщения — они будут пересылаться сотруднику.\n"
+            "Когда закончите — нажмите «Закрыть запрос».",
+            reply_markup=_active_chat_keyboard(aid),
         )
-        context.user_data["pending_reply"] = aid
+        return
 
-    elif data == "noop":
-        await query.answer("Вопрос уже взят.", show_alert=True)
+    # Закрыть запрос
+    if data.startswith("closeticket_"):
+        _, aid = data.split("_", 1)
+        admin_id = query.from_user.id
+
+        if claimed.get(aid) != admin_id:
+            await query.answer("Вы не ведёте этот запрос.", show_alert=True)
+            return
+
+        p = pending.get(aid, {})
+        user_chat_id = p.get("user_chat_id")
+
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(f"✅ Запрос #{aid[:8]} закрыт.")
+        context.user_data.pop("active_aid", None)
+
+        # Закрываем у сотрудника и просим оценку
+        if user_chat_id:
+            main_bot = Bot(token=MAIN_BOT_TOKEN)
+            try:
+                from src.bot.main import _waiting_operator, _pending_ratings, _rating_keyboard
+                _waiting_operator.pop(user_chat_id, None)
+                rating_kb = _rating_keyboard(aid) if aid in _pending_ratings else None
+                await main_bot.send_message(
+                    chat_id=user_chat_id,
+                    text="✅ Оператор закрыл ваш запрос.\n\nПожалуйста, оцените консультацию:",
+                    reply_markup=rating_kb,
+                )
+            except Exception as e:
+                logging.warning(f"close ticket notify user: {e}")
+
+        claimed.pop(aid, None)
+        pending.pop(aid, None)
+        escalation_messages.pop(aid, None)
+        return
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -328,34 +459,34 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not _is_admin(admin_id):
         return
 
-    aid = context.user_data.get("pending_reply")
-    logging.info(f"message_handler: admin_id={admin_id}, pending_reply={aid}, user_data={context.user_data}")
+    aid = context.user_data.get("active_aid")
     if not aid:
+        return
+
+    if claimed.get(aid) != admin_id:
+        await update.message.reply_text("Этот запрос взят другим оператором.")
         return
 
     p = pending.get(aid)
     if not p:
-        await update.message.reply_text("Не найден исходный запрос. Возможно, устарел.")
+        await update.message.reply_text("Запрос не найден или уже закрыт.")
+        context.user_data.pop("active_aid", None)
         return
 
-    if claimed.get(aid) != admin_id:
-        await update.message.reply_text("Этот вопрос взят другим оператором.")
-        return
-
-    reply_text = update.message.text
     try:
         main_bot = Bot(token=MAIN_BOT_TOKEN)
         await main_bot.send_message(
             chat_id=p["user_chat_id"],
-            text=f"Ответ оператора поддержки:\n\n{reply_text}",
+            text=f"👨‍💼 <b>Оператор поддержки:</b>\n\n{update.message.text}",
+            parse_mode="HTML",
         )
-        await update.message.reply_text("Ответ отправлен пользователю.")
+        await update.message.reply_text(
+            "✉️ Отправлено сотруднику.",
+            reply_markup=_active_chat_keyboard(aid),
+        )
     except Exception as e:
         logging.error(f"forward reply error: {e}")
         await update.message.reply_text(f"Ошибка при отправке: {e}")
-
-    context.user_data.pop("pending_reply", None)
-    claimed.pop(aid, None)
 
 
 async def cmd_weights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -364,13 +495,11 @@ async def cmd_weights(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     w = _load_weights()
     lines = ["Текущие веса изменения модели при оценке:\n"]
-    stars = {1: "⭐", 2: "⭐⭐", 3: "⭐⭐⭐", 4: "⭐⭐⭐⭐", 5: "⭐⭐⭐⭐⭐"}
     for score in range(1, 6):
         val = w.get(score, DEFAULT_WEIGHTS[score])
         sign = "+" if val > 0 else ""
-        lines.append(f"{stars[score]} (оценка {score}): {sign}{val}%")
+        lines.append(f"{'⭐' * score} (оценка {score}): {sign}{val}%")
     lines.append("\nЧтобы изменить: /setweight <1-5> <значение>")
-    lines.append("Пример: /setweight 5 3")
     await update.message.reply_text("\n".join(lines))
 
 
@@ -401,7 +530,7 @@ async def cmd_set_weight(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     old_sign = "+" if old > 0 else ""
     await update.message.reply_text(
         f"Вес для оценки {score}★ изменён: {old_sign}{old}% → {sign}{value}%\n"
-        f"Изменение вступает в силу для всех новых оценок."
+        "Изменение вступает в силу для всех новых оценок."
     )
 
 
@@ -437,7 +566,6 @@ def main():
 
 
 if __name__ == "__main__":
-    import asyncio
     try:
         asyncio.get_event_loop()
     except RuntimeError:
