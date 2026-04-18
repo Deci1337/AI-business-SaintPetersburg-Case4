@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Балтийский Берег — Service Desk AI</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   [x-cloak]{display:none!important}
@@ -136,110 +136,6 @@
     </div>
   </div>
 
-  <!-- Оценки модели -->
-  <div x-show="ratingsStats && ratingsStats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="text-sm font-medium text-gray-700 mb-1">Оценки операторов</div>
-    <div class="text-xs text-gray-400 mb-5">Средняя оценка качества ответов модели</div>
-    <div class="grid grid-cols-3 gap-4 mb-5">
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-gray-900" x-text="ratingsStats?.total"></div>
-        <div class="text-xs text-gray-400 mt-1">Оценок получено</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-blue-600" x-text="ratingsStats?.avg_score ? ratingsStats.avg_score + ' / 5' : '—'"></div>
-        <div class="text-xs text-gray-400 mt-1">Средняя оценка</div>
-      </div>
-      <div class="border border-gray-100 rounded-lg p-4 text-center">
-        <div class="text-2xl font-bold text-emerald-600"
-          x-text="ratingsStats?.distribution?.['5'] || 0">
-        </div>
-        <div class="text-xs text-gray-400 mt-1">Оценок «5»</div>
-      </div>
-    </div>
-    <div>
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Распределение оценок</div>
-      <canvas id="ratingsChart" height="80"></canvas>
-    </div>
-
-    <!-- Веса модели -->
-    <div class="mt-6 border-t border-gray-100 pt-5">
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Изменение весов модели</div>
-      <div class="text-xs text-gray-400 mb-4">Накопленный эффект оценок операторов на приоритеты источников RAG</div>
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <div class="rounded-lg p-4 border flex items-center gap-3"
-          :class="modelWeightDelta() > 0 ? 'border-emerald-200 bg-emerald-50' : modelWeightDelta() < 0 ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'">
-          <div class="text-3xl font-bold"
-            :class="modelWeightDelta() > 0 ? 'text-emerald-600' : modelWeightDelta() < 0 ? 'text-red-500' : 'text-gray-400'"
-            x-text="(modelWeightDelta() > 0 ? '+' : '') + modelWeightDelta().toFixed(1) + '%'">
-          </div>
-          <div>
-            <div class="text-xs font-medium text-gray-700">Суммарное изменение весов</div>
-            <div class="text-xs text-gray-400 mt-0.5"
-              x-text="modelWeightDelta() > 0 ? 'Модель дообучилась в лучшую сторону' : modelWeightDelta() < 0 ? 'Требуется доработка источников' : 'Нейтральные оценки'">
-            </div>
-          </div>
-        </div>
-        <div class="rounded-lg p-4 border border-gray-100 bg-gray-50">
-          <div class="text-xs font-medium text-gray-600 mb-2">Расшифровка по оценкам</div>
-          <div class="space-y-1 text-xs text-gray-500">
-            <template x-for="s in [5,4,3,2,1]" :key="s">
-              <div class="flex justify-between">
-                <span>
-                  <span x-text="'⭐'.repeat(s) + ' (×'"></span><span x-text="ratingsStats?.distribution?.[s] || ratingsStats?.distribution?.[String(s)] || 0"></span><span>)</span>
-                </span>
-                <span class="font-mono"
-                  :class="weightFor(s) > 0 ? 'text-emerald-600' : weightFor(s) < 0 ? 'text-red-500' : 'text-gray-400'"
-                  x-text="weightLabel(s) + ' за оценку'">
-                </span>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-      <div class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700"
-        x-text="modelWeightTrendLabel()">
-      </div>
-    </div>
-  </div>
-
-  <!-- Кооперативное обучение — динамика оценок -->
-  <div x-show="ratingsStats && ratingsStats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
-    <div class="flex items-start justify-between mb-1">
-      <div class="text-sm font-medium text-gray-700">Кооперативное обучение</div>
-      <div class="flex gap-1 text-xs border border-gray-200 rounded-md overflow-hidden">
-        <button @click="setRatingPeriod('hour')"
-          class="px-3 py-1 transition-colors"
-          :class="ratingPeriod === 'hour' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">
-          Час
-        </button>
-        <button @click="setRatingPeriod('day')"
-          class="px-3 py-1 transition-colors"
-          :class="ratingPeriod === 'day' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">
-          День
-        </button>
-        <button @click="setRatingPeriod('week')"
-          class="px-3 py-1 transition-colors"
-          :class="ratingPeriod === 'week' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">
-          Неделя
-        </button>
-      </div>
-    </div>
-    <div class="text-xs text-gray-400 mb-5">Специалисты оценивают ответы нейросети — система обучается на их реакции</div>
-
-    <canvas id="ratingsTimelineChart" height="100"></canvas>
-
-    <div class="flex gap-6 mt-3 text-xs">
-      <div class="flex items-center gap-1.5">
-        <span class="w-3 h-0.5 rounded-full bg-gray-400 inline-block"></span>
-        <span class="text-gray-500">Всего оценено</span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <span class="w-3 h-0.5 rounded-full bg-emerald-500 inline-block"></span>
-        <span class="text-gray-500">Положительно (4–5★)</span>
-      </div>
-    </div>
-  </div>
-
   <!-- Корпоративное обучение — пробелы в знаниях -->
   <div x-show="knowledgeGaps && knowledgeGaps.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
     <div class="flex items-start justify-between mb-1">
@@ -367,6 +263,111 @@
       </tbody>
     </table>
   </div>
+
+  <!-- Оценки модели -->
+  <div x-show="ratingsStats && ratingsStats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="text-sm font-medium text-gray-700 mb-1">Оценки операторов</div>
+    <div class="text-xs text-gray-400 mb-5">Средняя оценка качества ответов модели</div>
+    <div class="grid grid-cols-3 gap-4 mb-5">
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-gray-900" x-text="ratingsStats?.total"></div>
+        <div class="text-xs text-gray-400 mt-1">Оценок получено</div>
+      </div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-blue-600" x-text="ratingsStats?.avg_score ? ratingsStats.avg_score + ' / 5' : '—'"></div>
+        <div class="text-xs text-gray-400 mt-1">Средняя оценка</div>
+      </div>
+      <div class="border border-gray-100 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-emerald-600"
+          x-text="ratingsStats?.distribution?.['5'] || 0">
+        </div>
+        <div class="text-xs text-gray-400 mt-1">Оценок «5»</div>
+      </div>
+    </div>
+    <div>
+      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Распределение оценок</div>
+      <canvas id="ratingsChart" height="80"></canvas>
+    </div>
+
+    <!-- Веса модели -->
+    <div class="mt-6 border-t border-gray-100 pt-5">
+      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Изменение весов модели</div>
+      <div class="text-xs text-gray-400 mb-4">Накопленный эффект оценок операторов на приоритеты источников RAG</div>
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div class="rounded-lg p-4 border flex items-center gap-3"
+          :class="modelWeightDelta() > 0 ? 'border-emerald-200 bg-emerald-50' : modelWeightDelta() < 0 ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'">
+          <div class="text-3xl font-bold"
+            :class="modelWeightDelta() > 0 ? 'text-emerald-600' : modelWeightDelta() < 0 ? 'text-red-500' : 'text-gray-400'"
+            x-text="(modelWeightDelta() > 0 ? '+' : '') + modelWeightDelta().toFixed(1) + '%'">
+          </div>
+          <div>
+            <div class="text-xs font-medium text-gray-700">Суммарное изменение весов</div>
+            <div class="text-xs text-gray-400 mt-0.5"
+              x-text="modelWeightDelta() > 0 ? 'Модель дообучилась в лучшую сторону' : modelWeightDelta() < 0 ? 'Требуется доработка источников' : 'Нейтральные оценки'">
+            </div>
+          </div>
+        </div>
+        <div class="rounded-lg p-4 border border-gray-100 bg-gray-50">
+          <div class="text-xs font-medium text-gray-600 mb-2">Расшифровка по оценкам</div>
+          <div class="space-y-1 text-xs text-gray-500">
+            <template x-for="s in [5,4,3,2,1]" :key="s">
+              <div class="flex justify-between">
+                <span>
+                  <span x-text="'⭐'.repeat(s) + ' (×'"></span><span x-text="ratingsStats?.distribution?.[s] || ratingsStats?.distribution?.[String(s)] || 0"></span><span>)</span>
+                </span>
+                <span class="font-mono"
+                  :class="weightFor(s) > 0 ? 'text-emerald-600' : weightFor(s) < 0 ? 'text-red-500' : 'text-gray-400'"
+                  x-text="weightLabel(s) + ' за оценку'">
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700"
+        x-text="modelWeightTrendLabel()">
+      </div>
+    </div>
+  </div>
+
+  <!-- Кооперативное обучение — динамика оценок -->
+  <div x-show="ratingsStats && ratingsStats.total > 0" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
+    <div class="flex items-start justify-between mb-1">
+      <div class="text-sm font-medium text-gray-700">Кооперативное обучение</div>
+      <div class="flex gap-1 text-xs border border-gray-200 rounded-md overflow-hidden">
+        <button @click="setRatingPeriod('hour')"
+          class="px-3 py-1 transition-colors"
+          :class="ratingPeriod === 'hour' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">
+          Час
+        </button>
+        <button @click="setRatingPeriod('day')"
+          class="px-3 py-1 transition-colors"
+          :class="ratingPeriod === 'day' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">
+          День
+        </button>
+        <button @click="setRatingPeriod('week')"
+          class="px-3 py-1 transition-colors"
+          :class="ratingPeriod === 'week' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'">
+          Неделя
+        </button>
+      </div>
+    </div>
+    <div class="text-xs text-gray-400 mb-5">Специалисты оценивают ответы нейросети — система обучается на их реакции</div>
+
+    <canvas id="ratingsTimelineChart" height="100"></canvas>
+
+    <div class="flex gap-6 mt-3 text-xs">
+      <div class="flex items-center gap-1.5">
+        <span class="w-3 h-0.5 rounded-full bg-gray-400 inline-block"></span>
+        <span class="text-gray-500">Всего оценено</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-3 h-0.5 rounded-full bg-emerald-500 inline-block"></span>
+        <span class="text-gray-500">Положительно (4–5★)</span>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Пустое состояние (нет данных сессии и нет статистики БД) -->
   <div x-show="!dbStats && (!stats || stats.total === 0) && allAnalyses.length === 0" class="text-center py-16 text-gray-400">
