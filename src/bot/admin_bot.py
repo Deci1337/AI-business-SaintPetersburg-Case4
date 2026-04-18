@@ -18,15 +18,78 @@ MAIN_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 RATINGS_FILE = "data/ratings.csv"
 ADMINS_FILE = "data/admins.json"
 WEIGHTS_FILE = "data/weights.json"
+ESCALATIONS_FILE = "data/escalations.json"
 
 DEFAULT_WEIGHTS = {1: -2, 2: -1, 3: 0, 4: 1, 5: 2}
 
-# aid -> admin_user_id (кто взял)
-claimed: dict = {}
-# aid -> {"user_chat_id": int, "question": str, "answer": str, "history": list[dict]}
-pending: dict = {}
-# aid -> {admin_chat_id: message_id} — для обновления кнопок у всех
-escalation_messages: dict[str, dict[int, int]] = {}
+# Shared state через JSON-файл (user-bot и admin-bot — разные процессы)
+# {
+#   "pending": {aid: {"user_chat_id", "question", "answer", "history", "idea"}},
+#   "claimed": {aid: admin_id},
+#   "messages": {aid: {admin_chat_id: message_id}}
+# }
+
+
+def _load_state() -> dict:
+    if not os.path.exists(ESCALATIONS_FILE):
+        return {"pending": {}, "claimed": {}, "messages": {}}
+    try:
+        with open(ESCALATIONS_FILE, encoding="utf-8") as f:
+            s = json.load(f)
+        s.setdefault("pending", {})
+        s.setdefault("claimed", {})
+        s.setdefault("messages", {})
+        return s
+    except Exception:
+        return {"pending": {}, "claimed": {}, "messages": {}}
+
+
+def _save_state(state: dict) -> None:
+    os.makedirs("data", exist_ok=True)
+    tmp = ESCALATIONS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False)
+    os.replace(tmp, ESCALATIONS_FILE)
+
+
+def _get_pending(aid: str) -> dict | None:
+    return _load_state()["pending"].get(aid)
+
+
+def _set_pending(aid: str, data: dict) -> None:
+    s = _load_state()
+    s["pending"][aid] = data
+    _save_state(s)
+
+
+def _pop_pending(aid: str) -> None:
+    s = _load_state()
+    s["pending"].pop(aid, None)
+    s["claimed"].pop(aid, None)
+    s["messages"].pop(aid, None)
+    _save_state(s)
+
+
+def _get_claimed(aid: str) -> int | None:
+    v = _load_state()["claimed"].get(aid)
+    return int(v) if v is not None else None
+
+
+def _set_claimed(aid: str, admin_id: int) -> None:
+    s = _load_state()
+    s["claimed"][aid] = admin_id
+    _save_state(s)
+
+
+def _get_messages(aid: str) -> dict[int, int]:
+    m = _load_state()["messages"].get(aid, {})
+    return {int(k): int(v) for k, v in m.items()}
+
+
+def _set_message(aid: str, admin_chat_id: int, message_id: int) -> None:
+    s = _load_state()
+    s["messages"].setdefault(aid, {})[str(admin_chat_id)] = message_id
+    _save_state(s)
 
 _app = None
 
@@ -121,24 +184,68 @@ def _format_similar_solutions(chunks: list) -> str:
     return "\n".join(lines)
 
 
-def _format_card(analysis_id: str, question: str, answer: str, chunks: list | None = None) -> str:
+def _format_card(
+    analysis_id: str,
+    question: str,
+    answer: str,
+    chunks: list | None = None,
+    idea: str | None = None,
+    dialog_history: list[dict] | None = None,
+) -> str:
     truncated = answer[:600] + ("..." if len(answer) > 600 else "")
     lines = [
         f"🚨 Эскалация — запрос #{analysis_id[:8]}",
         "",
         f"Вопрос: {question}",
+    ]
+    if idea:
+        lines += ["", f"💡 Суть проблемы (AI): {idea}"]
+    lines += [
         "",
         "Последний ответ AI:",
         truncated,
         "",
         f"Анализ: {os.getenv('API_PUBLIC_URL', 'http://localhost:8001')}/analysis/{analysis_id}",
     ]
+    if dialog_history:
+        lines.append("")
+        lines.append(f"📋 История диалога ({len(dialog_history)} сообщ.) — кнопка ниже")
     if chunks:
         similar = _format_similar_solutions(chunks)
         if similar:
             lines.append(similar)
     lines.append("\nНажмите «Взять диалог», чтобы ответить сотруднику.")
     return "\n".join(lines)
+
+
+async def _make_idea(question: str, history: list[dict] | None = None) -> str:
+    """Генерирует краткую суть проблемы через API /ask (internal режим)."""
+    import httpx
+    api_base = os.getenv("API_BASE_URL", "http://api:8001")
+    api_key = os.getenv("API_KEY")
+    dialog = ""
+    if history:
+        dialog = "\n".join(f"Сотрудник: {t.get('user','')}" for t in history[-3:])
+    prompt = (
+        "Опиши одним коротким предложением (до 20 слов) суть IT-проблемы сотрудника. "
+        "Только суть, без шаблонных фраз типа 'проблема заключается в'.\n\n"
+        + (f"Ранее в диалоге:\n{dialog}\n\n" if dialog else "")
+        + f"Итоговый вопрос: {question}"
+    )
+    try:
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                f"{api_base}/ask",
+                json={"question": prompt, "source": "internal", "history": []},
+                headers=headers,
+            )
+            ans = r.json().get("answer", "").strip()
+            # Берём только первую строку, макс 200 символов
+            return ans.split("\n")[0][:200] if ans else ""
+    except Exception as e:
+        logging.warning(f"_make_idea error: {e}")
+        return ""
 
 
 # --- Notify ---
@@ -156,22 +263,24 @@ async def notify_admins(
     if not admin_ids or not ADMIN_BOT_TOKEN:
         return
 
-    pending[analysis_id] = {
+    idea = await _make_idea(question, dialog_history)
+
+    _set_pending(analysis_id, {
         "user_chat_id": user_chat_id,
         "question": question,
         "answer": answer,
         "history": dialog_history or [],
-    }
-    escalation_messages[analysis_id] = {}
+        "idea": idea,
+    })
 
-    text = _format_card(analysis_id, question, answer, chunks or [])
+    text = _format_card(analysis_id, question, answer, chunks or [], idea=idea, dialog_history=dialog_history)
     keyboard = _escalation_keyboard(analysis_id) if escalated else None
 
     bot = Bot(token=ADMIN_BOT_TOKEN)
     for chat_id in admin_ids:
         try:
             msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
-            escalation_messages[analysis_id][chat_id] = msg.message_id
+            _set_message(analysis_id, chat_id, msg.message_id)
         except Exception as e:
             logging.error(f"notify_admins: chat_id={chat_id} error={e}")
 
@@ -183,7 +292,7 @@ async def user_canceled_request(analysis_id: str) -> None:
 
     bot = Bot(token=ADMIN_BOT_TOKEN)
     admin_ids = _all_admin_ids()
-    msg_map = escalation_messages.get(analysis_id, {})
+    msg_map = _get_messages(analysis_id)
 
     for chat_id in admin_ids:
         msg_id = msg_map.get(chat_id)
@@ -201,9 +310,7 @@ async def user_canceled_request(analysis_id: str) -> None:
         except Exception as e:
             logging.warning(f"user_canceled_request: chat_id={chat_id} error={e}")
 
-    claimed.pop(analysis_id, None)
-    pending.pop(analysis_id, None)
-    escalation_messages.pop(analysis_id, None)
+    _pop_pending(analysis_id)
 
 
 # --- Ratings ---
@@ -340,7 +447,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Показать историю диалога
     if data.startswith("history_"):
         _, aid = data.split("_", 1)
-        p = pending.get(aid)
+        p = _get_pending(aid)
         if not p:
             await query.answer("История недоступна.", show_alert=True)
             return
@@ -361,16 +468,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         admin_id = query.from_user.id
         admin_name = query.from_user.username or query.from_user.first_name
 
-        if aid in claimed:
+        if _get_claimed(aid) is not None:
             await query.answer("Этот запрос уже взят другим оператором.", show_alert=True)
             return
 
-        claimed[aid] = admin_id
+        _set_claimed(aid, admin_id)
         context.user_data["active_aid"] = aid
 
         # Обновляем кнопку у всех админов
         bot = Bot(token=ADMIN_BOT_TOKEN)
-        msg_map = escalation_messages.get(aid, {})
+        msg_map = _get_messages(aid)
         for chat_id, msg_id in msg_map.items():
             try:
                 await bot.edit_message_reply_markup(
@@ -393,14 +500,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 pass
 
         # Уведомляем сотрудника
-        p = pending.get(aid, {})
-        if p.get("user_chat_id"):
+        p = _get_pending(aid) or {}
+        user_chat_id = p.get("user_chat_id")
+        if user_chat_id:
             main_bot = Bot(token=MAIN_BOT_TOKEN)
             try:
-                from src.bot.main import _waiting_operator
-                _waiting_operator[p["user_chat_id"]] = aid
                 await main_bot.send_message(
-                    chat_id=p["user_chat_id"],
+                    chat_id=user_chat_id,
                     text="👨‍💼 Оператор подключился к вашему запросу. Ожидайте ответа.\n\nЕсли вопрос уже решён:",
                     reply_markup=InlineKeyboardMarkup([[
                         InlineKeyboardButton("✅ Отмена, уже решил", callback_data=f"usercanceled_{aid}"),
@@ -422,11 +528,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         _, aid = data.split("_", 1)
         admin_id = query.from_user.id
 
-        if claimed.get(aid) != admin_id:
+        if _get_claimed(aid) != admin_id:
             await query.answer("Вы не ведёте этот запрос.", show_alert=True)
             return
 
-        p = pending.get(aid, {})
+        p = _get_pending(aid) or {}
         user_chat_id = p.get("user_chat_id")
 
         await query.edit_message_reply_markup(reply_markup=None)
@@ -437,9 +543,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if user_chat_id:
             main_bot = Bot(token=MAIN_BOT_TOKEN)
             try:
-                from src.bot.main import _waiting_operator, _pending_ratings, _rating_keyboard
-                _waiting_operator.pop(user_chat_id, None)
-                rating_kb = _rating_keyboard(aid) if aid in _pending_ratings else None
+                # Инлайн-клавиатура оценки (aid тот же)
+                rating_kb = InlineKeyboardMarkup([[
+                    InlineKeyboardButton(str(i), callback_data=f"rate_{aid}_{i}")
+                    for i in range(1, 6)
+                ]])
                 await main_bot.send_message(
                     chat_id=user_chat_id,
                     text="✅ Оператор закрыл ваш запрос.\n\nПожалуйста, оцените консультацию:",
@@ -448,9 +556,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             except Exception as e:
                 logging.warning(f"close ticket notify user: {e}")
 
-        claimed.pop(aid, None)
-        pending.pop(aid, None)
-        escalation_messages.pop(aid, None)
+        _pop_pending(aid)
         return
 
 
@@ -463,11 +569,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not aid:
         return
 
-    if claimed.get(aid) != admin_id:
+    if _get_claimed(aid) != admin_id:
         await update.message.reply_text("Этот запрос взят другим оператором.")
         return
 
-    p = pending.get(aid)
+    p = _get_pending(aid)
     if not p:
         await update.message.reply_text("Запрос не найден или уже закрыт.")
         context.user_data.pop("active_aid", None)
