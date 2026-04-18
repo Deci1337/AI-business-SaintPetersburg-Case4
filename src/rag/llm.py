@@ -65,6 +65,22 @@ RELEVANCE_PROMPT = """Ты — фильтр входящих запросов в
 
 Запрос пользователя: {query}"""
 
+_OPERATOR_KEYWORDS = [
+    "соедини с оператором", "соедини со специалистом", "живой человек",
+    "живой специалист", "переключи на", "переведи на", "хочу поговорить с",
+    "позови оператора", "позови специалиста", "нужен оператор", "нужен специалист",
+    "хочу оператора", "хочу специалиста", "свяжи меня с", "передай оператору",
+    "передай специалисту", "поговорить с человеком", "не хочу с ботом",
+    "реальный человек", "живой человек",
+]
+
+
+def check_wants_operator(user_query: str) -> bool:
+    """Возвращает True если сотрудник явно просит живого оператора."""
+    q = user_query.lower().strip()
+    return any(kw in q for kw in _OPERATOR_KEYWORDS)
+
+
 _NO_INFO_MARKERS = [
     "нет информации",
     "не содержит информации",
@@ -222,6 +238,19 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
             "escalated": False,
             "irrelevant": True,
             "classification": {},
+            "top_source": None,
+        }
+
+    if check_wants_operator(user_query):
+        cl = classify(user_query)
+        if cl["service"] == "Другое":
+            cl["service"] = classify_topic(user_query)
+        return {
+            "answer": "Понял, переключаю на специалиста поддержки.",
+            "escalated": True,
+            "irrelevant": False,
+            "wants_operator": True,
+            "classification": cl,
             "top_source": None,
         }
 

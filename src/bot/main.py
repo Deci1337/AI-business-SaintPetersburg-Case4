@@ -253,6 +253,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = data["answer"]
         escalated = data["escalated"]
         irrelevant = data.get("irrelevant", False)
+        wants_operator = data.get("wants_operator", False)
         classification = data.get("classification", {})
         top_source = data.get("top_source")
     except Exception as e:
@@ -260,6 +261,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = "Произошла ошибка. Попробуйте позже или обратитесь к специалисту поддержки."
         escalated = True
         irrelevant = False
+        wants_operator = False
         classification = {}
         top_source = None
         data = {}
@@ -282,11 +284,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _cancel_close_timer(chat_id)
         _clear_history(chat_id)
 
-        await update.message.reply_text(
-            "К сожалению, точного ответа в базе знаний не нашлось.\n\n"
-            "<i>💬 Создаю заявку в поддержку...</i>",
-            parse_mode=ParseMode.HTML,
-        )
+        if wants_operator:
+            await update.message.reply_text(
+                "👨‍💼 Переключаю на специалиста поддержки.\n\n"
+                "<i>💬 Создаю заявку...</i>",
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            await update.message.reply_text(
+                "К сожалению, точного ответа в базе знаний не нашлось.\n\n"
+                "<i>💬 Создаю заявку в поддержку...</i>",
+                parse_mode=ParseMode.HTML,
+            )
         await start_ticket_flow(update, context, query, classification)
 
     else:
