@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import os
+import re
 import time
 import traceback
 import uuid
@@ -47,6 +48,27 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 analyses: OrderedDict = OrderedDict()
 MAX_ANALYSES = 1000
+QUESTIONS_LOG = "data/questions_log.jsonl"
+
+
+def _append_question_log(entry: dict) -> None:
+    """Персистентный лог каждого вопроса — не сбрасывается при перезапуске."""
+    os.makedirs("data", exist_ok=True)
+    with open(QUESTIONS_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _normalize_question(q: str) -> str:
+    """Приводим вопрос к общему виду для группировки похожих."""
+    q = q.lower().strip()
+    q = re.sub(r"[^\w\s]", " ", q)
+    q = re.sub(r"\s+", " ", q)
+    # Убираем стоп-слова
+    stop = {"у", "в", "на", "с", "по", "из", "к", "за", "и", "или", "не", "как",
+            "что", "мне", "я", "он", "она", "они", "это", "мой", "наш", "при",
+            "от", "до", "об", "для", "то", "а", "но", "же", "уже", "ещё", "нет"}
+    words = [w for w in q.split() if w not in stop and len(w) > 2]
+    return " ".join(words[:8])  # первые 8 значимых слов — ключ группировки
 
 
 def save_analysis(data: dict) -> str:
@@ -102,6 +124,13 @@ def ask_endpoint(q: Query, _=Depends(require_api_key)):
     aid = save_analysis(data)
     data["analysis_id"] = aid
     data["analysis_url"] = f"{PUBLIC_URL}/analysis/{aid}"
+
+    _append_question_log({
+        "ts": data["created_at"],
+        "question": q.question,
+        "service": result["classification"].get("service", "Другое"),
+        "escalated": result["escalated"],
+    })
     return data
 
 
@@ -148,48 +177,83 @@ def get_weekly_stats():
 
 @app.get("/stats/knowledge-gaps")
 def knowledge_gaps(period: str = "month", top_n: int = 7):
-    """Топ категорий пробелов в знаниях сотрудников за период (day/week/month/all).
-    Для каждой категории — число обращений и топ конкретных вопросов."""
+    """Топ категорий и конкретных вопросов из персистентного лога.
+    Читает data/questions_log.jsonl — не сбрасывается при перезапуске."""
     from datetime import timedelta
     from collections import defaultdict
 
     period_days = {"day": 1, "week": 7, "month": 30, "all": None}
     days = period_days.get(period, 30)
-    if days:
-        cutoff = datetime.now() - timedelta(days=days)
-        subset = [d for d in analyses.values() if datetime.fromisoformat(d["created_at"]) >= cutoff]
-    else:
-        subset = list(analyses.values())
+    cutoff = (datetime.now() - timedelta(days=days)) if days else None
 
-    if not subset:
+    # Читаем персистентный лог
+    rows = []
+    if os.path.exists(QUESTIONS_LOG):
+        with open(QUESTIONS_LOG, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if cutoff:
+                        ts = datetime.fromisoformat(entry["ts"])
+                        if ts < cutoff:
+                            continue
+                    rows.append(entry)
+                except Exception:
+                    pass
+
+    # Дополняем RAM-сессией (вдруг лог пустой — первый запуск)
+    if not rows:
+        for d in analyses.values():
+            if cutoff and datetime.fromisoformat(d["created_at"]) < cutoff:
+                continue
+            rows.append({
+                "ts": d["created_at"],
+                "question": d.get("question", ""),
+                "service": d.get("classification", {}).get("service", "Другое"),
+                "escalated": d.get("escalated", False),
+            })
+
+    if not rows:
         return {"period": period, "total": 0, "categories": []}
 
-    # Группируем по сервис-категории
-    cat_counts: dict[str, int] = defaultdict(int)
-    cat_questions: dict[str, list[str]] = defaultdict(list)
+    total = len(rows)
 
-    for d in subset:
-        svc = d.get("classification", {}).get("service", "Другое")
+    # Группировка по категории
+    cat_counts: dict[str, int] = defaultdict(int)
+    # Внутри категории — счётчик нормализованных вопросов + оригинал
+    cat_qcounts: dict[str, dict[str, dict]] = defaultdict(dict)
+
+    for entry in rows:
+        svc = entry.get("service", "Другое")
+        q_orig = entry.get("question", "").strip()
         cat_counts[svc] += 1
-        q = d.get("question", "").strip()
-        if q and len(cat_questions[svc]) < 5:
-            cat_questions[svc].append(q)
+
+        if q_orig:
+            key = _normalize_question(q_orig)
+            if key not in cat_qcounts[svc]:
+                cat_qcounts[svc][key] = {"question": q_orig, "count": 0}
+            cat_qcounts[svc][key]["count"] += 1
 
     sorted_cats = sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
 
-    return {
-        "period": period,
-        "total": len(subset),
-        "categories": [
-            {
-                "service": svc,
-                "count": cnt,
-                "share_pct": round(cnt / len(subset) * 100, 1),
-                "top_questions": cat_questions[svc],
-            }
-            for svc, cnt in sorted_cats
-        ],
-    }
+    categories = []
+    for svc, cnt in sorted_cats:
+        # Топ-5 конкретных вопросов по частоте
+        top_qs = sorted(cat_qcounts[svc].values(), key=lambda x: x["count"], reverse=True)[:5]
+        categories.append({
+            "service": svc,
+            "count": cnt,
+            "share_pct": round(cnt / total * 100, 1),
+            "top_questions": [
+                {"question": q["question"], "count": q["count"]}
+                for q in top_qs
+            ],
+        })
+
+    return {"period": period, "total": total, "categories": categories}
 
 
 @app.get("/stats")

@@ -311,12 +311,12 @@
 
           <!-- Раскрытый список вопросов -->
           <div x-show="cat.expanded" x-cloak class="border-t border-gray-100 bg-slate-50 px-4 py-3">
-            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Реальные вопросы сотрудников</div>
-            <ul class="space-y-1.5">
-              <template x-for="q in cat.top_questions" :key="q">
-                <li class="flex items-start gap-2 text-sm text-gray-600">
-                  <span class="text-gray-300 mt-0.5 flex-shrink-0">—</span>
-                  <span x-text="q"></span>
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Топ вопросов сотрудников — по частоте</div>
+            <ul class="space-y-2">
+              <template x-for="q in cat.top_questions" :key="q.question">
+                <li class="flex items-center gap-3">
+                  <span class="text-xs font-bold font-mono w-6 text-center rounded bg-white border border-gray-200 py-0.5 flex-shrink-0 text-gray-500" x-text="q.count + 'x'"></span>
+                  <span class="text-sm text-gray-700" x-text="q.question"></span>
                 </li>
               </template>
             </ul>
