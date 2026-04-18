@@ -164,13 +164,37 @@ def ask_endpoint(q: Query, _=Depends(require_api_key)):
     data["analysis_id"] = aid
     data["analysis_url"] = f"{PUBLIC_URL}/analysis/{aid}"
 
-    _append_question_log({
-        "ts": data["created_at"],
-        "question": q.question,
-        "service": result["classification"].get("service", "Другое"),
-        "escalated": result["escalated"],
-    })
     return data
+
+
+class DialogClosedRequest(BaseModel):
+    history: list[DialogTurn]           # весь диалог (user/assistant пары)
+    escalated: bool = False
+    service: str = "Другое"
+
+
+@app.post("/dialog-closed")
+def dialog_closed(req: DialogClosedRequest, _=Depends(require_api_key)):
+    """Вызывается при закрытии диалога. Генерирует тему и пишет одну запись в лог."""
+    from src.rag.llm import classify_topic
+    if not req.history:
+        return {"ok": False, "reason": "empty history"}
+
+    # Склеиваем диалог для генерации темы
+    combined = " ".join(t.user for t in req.history)
+    service = req.service
+
+    # Если сервис "Другое" — определяем через LLM
+    if service == "Другое" or not service:
+        service = classify_topic(combined)
+
+    _append_question_log({
+        "ts": datetime.now().isoformat(),
+        "question": combined[:500],
+        "service": service,
+        "escalated": req.escalated,
+    })
+    return {"ok": True, "service": service}
 
 
 @app.get("/analyses")

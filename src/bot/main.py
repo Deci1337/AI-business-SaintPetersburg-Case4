@@ -109,10 +109,33 @@ def _cancel_close_timer(chat_id: int) -> None:
         handle.cancel()
 
 
+async def _report_dialog_closed(chat_id: int, escalated: bool = False) -> None:
+    """Отправляет summary закрытого диалога в API для статистики."""
+    turns = _dialog_history.get(chat_id, {}).get("turns", [])
+    if not turns:
+        return
+    try:
+        headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.post(
+                f"{API_BASE}/dialog-closed",
+                json={
+                    "history": turns,
+                    "escalated": escalated,
+                    "service": "Другое",
+                },
+                headers=headers,
+            )
+    except Exception as e:
+        logging.warning(f"_report_dialog_closed error: {e}")
+
+
 async def _auto_close_dialog(chat_id: int, bot: Bot) -> None:
     """Вызывается по таймауту — закрывает диалог и просит оценку."""
     _close_timers.pop(chat_id, None)
     aid = _get_last_aid(chat_id)
+
+    await _report_dialog_closed(chat_id, escalated=False)
     _clear_history(chat_id)
 
     try:
@@ -309,6 +332,7 @@ async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         _, aid = cb.data.split("_", 1)
         chat_id = cb.message.chat_id
         _waiting_operator.pop(chat_id, None)
+        await _report_dialog_closed(chat_id, escalated=True)
         _clear_history(chat_id)
         await cb.edit_message_reply_markup(reply_markup=None)
 
