@@ -6,7 +6,7 @@ import logging
 import httpx
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, ReplyKeyboardRemove
 from telegram.constants import ParseMode, ChatAction
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from src.bot.logger import log_dialog
@@ -83,6 +83,12 @@ def _rating_keyboard(aid: str) -> InlineKeyboardMarkup:
 def _waiting_operator_keyboard(aid: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Отмена, уже решил", callback_data=f"usercanceled_{aid}"),
+    ]])
+
+
+def _close_keyboard(aid: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Закрыть обращение", callback_data=f"closedialog_{aid}"),
     ]])
 
 
@@ -190,7 +196,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _waiting_operator.pop(chat_id, None)
     await update.message.reply_text(
         "Здравствуйте! Я AI-помощник сервис-деска «Балтийский Берег».\n"
-        "Опишите вашу проблему — найду решение в базе знаний."
+        "Опишите вашу проблему — найду решение в базе знаний.",
+        reply_markup=ReplyKeyboardRemove(),
     )
 
 
@@ -200,7 +207,8 @@ async def new_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _clear_history(chat_id)
     _waiting_operator.pop(chat_id, None)
     await update.message.reply_text(
-        "Контекст диалога сброшен. Опишите новую проблему."
+        "Контекст диалога сброшен. Опишите новую проблему.",
+        reply_markup=ReplyKeyboardRemove(),
     )
 
 
@@ -295,7 +303,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parts.append(f"\n<i>📎 {src_label}: {html.escape(top_source['title'][:60])}</i>")
         text = "\n".join(parts)
 
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=_close_keyboard(analysis_id) if analysis_id else None,
+        )
 
         # Запускаем таймер авто-закрытия
         _schedule_close_timer(chat_id, context.bot)
@@ -324,6 +336,22 @@ async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Ticket flow callbacks
     if cb.data.startswith("ticket_"):
         await handle_ticket_callback(update, context)
+        return
+
+    # Закрыть обращение вручную (кнопка под ответом бота)
+    if cb.data.startswith("closedialog_"):
+        await cb.answer()
+        _, aid = cb.data.split("_", 1)
+        chat_id = cb.message.chat_id
+        _cancel_close_timer(chat_id)
+        await _report_dialog_closed(chat_id, escalated=False)
+        _clear_history(chat_id)
+        await cb.edit_message_reply_markup(reply_markup=None)
+        p = _pending_ratings.get(aid, {})
+        await cb.message.reply_text(
+            "✅ Обращение закрыто.\n\nПожалуйста, оцените консультацию:",
+            reply_markup=_rating_keyboard(aid) if p else None,
+        )
         return
 
     # Пользователь отменил ожидание оператора
