@@ -12,16 +12,18 @@
   .fade-in{animation:fadeIn .35s ease}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
   pre{white-space:pre-wrap;word-break:break-word}
-  .chunk-row:hover{background:#f8fafc}
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen text-gray-800" x-data="ragInspector()">
 
 <!-- Header -->
 <header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
-  <div>
-    <div class="text-base font-semibold text-gray-900 leading-tight">Балтийский Берег</div>
-    <div class="text-xs text-gray-400 mt-0.5">Service Desk AI — RAG Inspector</div>
+  <div class="flex items-center gap-3">
+    <img src="/static/logo.png" alt="Балтийский Берег" class="h-10 w-auto">
+    <div>
+      <div class="text-base font-semibold text-gray-900 leading-tight">Балтийский Берег</div>
+      <div class="text-xs text-gray-400 mt-0.5">Service Desk AI — RAG Inspector</div>
+    </div>
   </div>
   <div class="flex items-center gap-2">
     <div class="w-2 h-2 rounded-full" :class="apiOk ? 'bg-emerald-400' : 'bg-red-400'"></div>
@@ -30,170 +32,6 @@
 </header>
 
 <div class="max-w-7xl mx-auto px-6 py-6 space-y-5">
-
-  <!-- Поисковая строка -->
-  <div class="bg-white rounded-lg border border-gray-200 p-5">
-    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Задайте вопрос сотрудника</div>
-    <div class="flex gap-3">
-      <input
-        x-model="query"
-        @keydown.enter="submit"
-        type="text"
-        placeholder="Например: не подключается VPN, ошибка в 1С при отчёте..."
-        class="flex-1 border border-gray-300 rounded-md px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        :disabled="loading"
-      >
-      <button
-        @click="submit"
-        :disabled="loading || !query.trim()"
-        class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-5 py-2.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-center"
-      >
-        <svg x-show="loading" class="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-        </svg>
-        <span x-text="loading ? 'Поиск...' : 'Спросить'"></span>
-      </button>
-    </div>
-    <div class="flex flex-wrap gap-2 mt-3">
-      <span class="text-xs text-gray-400">Примеры:</span>
-      <template x-for="q in quickQuestions" :key="q">
-        <button @click="query = q; submit()"
-          class="text-xs bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600 px-3 py-1 rounded-md transition-colors"
-          x-text="q"></button>
-      </template>
-    </div>
-  </div>
-
-  <!-- Результат -->
-  <div x-show="result" x-cloak class="fade-in space-y-4">
-
-    <!-- Метрики запроса -->
-    <div class="grid grid-cols-4 gap-3">
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">Общее время</div>
-        <div class="text-xl font-semibold text-blue-600" x-text="result?.timing?.total_ms + ' мс'"></div>
-      </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">Поиск</div>
-        <div class="text-xl font-semibold text-violet-600" x-text="result?.timing?.search_ms + ' мс'"></div>
-      </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">YandexGPT</div>
-        <div class="text-xl font-semibold text-indigo-600" x-text="result?.timing?.llm_ms + ' мс'"></div>
-      </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="text-xs text-gray-400 mb-1">Статус</div>
-        <div class="text-sm font-semibold mt-0.5"
-          :class="result?.escalated ? 'text-orange-500' : 'text-emerald-600'"
-          x-text="result?.escalated ? 'Эскалация' : 'Решено автоматически'">
-        </div>
-      </div>
-    </div>
-
-    <!-- Классификация -->
-    <div x-show="result?.classification" class="grid grid-cols-2 gap-3">
-      <div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3">
-        <div class="w-1 h-8 bg-violet-400 rounded-full flex-shrink-0"></div>
-        <div>
-          <div class="text-xs text-gray-400">Категория сервиса</div>
-          <div class="font-medium text-gray-800 text-sm mt-0.5" x-text="result?.classification?.service || '—'"></div>
-        </div>
-      </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3">
-        <div class="w-1 h-8 rounded-full flex-shrink-0"
-          :class="{
-            'bg-red-500': result?.classification?.priority === 'Критичный',
-            'bg-orange-400': result?.classification?.priority === 'Высокий',
-            'bg-yellow-400': result?.classification?.priority === 'Средний',
-            'bg-emerald-400': result?.classification?.priority === 'Низкий',
-          }">
-        </div>
-        <div>
-          <div class="text-xs text-gray-400">Приоритет</div>
-          <div class="font-medium text-sm mt-0.5"
-            :class="{
-              'text-red-600': result?.classification?.priority === 'Критичный',
-              'text-orange-500': result?.classification?.priority === 'Высокий',
-              'text-yellow-600': result?.classification?.priority === 'Средний',
-              'text-emerald-600': result?.classification?.priority === 'Низкий',
-            }"
-            x-text="result?.classification?.priority || '—'">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Ответ + Фрагменты -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-      <!-- Ответ -->
-      <div class="bg-white rounded-lg border border-gray-200 p-5">
-        <div class="flex items-center justify-between mb-3">
-          <div class="text-sm font-medium text-gray-700">Ответ модели</div>
-          <span class="text-xs px-2 py-0.5 rounded-md font-medium"
-            :class="result?.escalated ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'"
-            x-text="result?.escalated ? 'Нужен оператор' : 'Автоответ'">
-          </span>
-        </div>
-        <div class="text-sm text-gray-700 leading-relaxed bg-slate-50 rounded-md p-4 border border-gray-100" x-text="result?.answer"></div>
-        <div x-show="result?.top_source" class="mt-3 flex items-center gap-2 text-xs text-gray-500">
-          <span class="px-2 py-0.5 rounded-md font-medium border"
-            :class="result?.top_source?.source === 'kb' ? 'border-violet-200 bg-violet-50 text-violet-700' :
-                    result?.top_source?.source === 'expense' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-cyan-200 bg-cyan-50 text-cyan-700'"
-            x-text="result?.top_source?.source === 'kb' ? 'KB' :
-                    result?.top_source?.source === 'expense' ? 'Решение' : 'Тикет'">
-          </span>
-          <span class="truncate" x-text="result?.top_source?.title"></span>
-          <span class="font-mono text-emerald-600 flex-shrink-0" x-text="(result?.top_source?.score * 100).toFixed(0) + '%'"></span>
-        </div>
-        <div x-show="result?.analysis_id" class="mt-3">
-          <a :href="`/analysis/${result?.analysis_id}`" target="_blank"
-            class="text-xs text-blue-600 hover:underline">
-            Открыть полный анализ →
-          </a>
-        </div>
-      </div>
-
-      <!-- Фрагменты -->
-      <div class="bg-white rounded-lg border border-gray-200 p-5">
-        <div class="flex items-center justify-between mb-3">
-          <div class="text-sm font-medium text-gray-700">Найденные фрагменты</div>
-          <div class="flex gap-3 text-xs text-gray-400">
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400 inline-block"></span>KB</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Решение</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>Тикет</span>
-          </div>
-        </div>
-        <div class="space-y-1.5">
-          <template x-for="chunk in result?.chunks" :key="chunk.rank">
-            <div class="chunk-row rounded-md border cursor-pointer transition-colors"
-              :class="chunk.rank === 1 ? 'border-blue-200 bg-blue-50' : 'border-gray-100'"
-              @click="chunk.expanded = !chunk.expanded">
-              <div class="flex items-center gap-2.5 px-3 py-2">
-                <span class="text-xs font-bold text-gray-400 w-4 flex-shrink-0" x-text="chunk.rank"></span>
-                <span class="text-xs px-1.5 py-0.5 rounded-md font-medium flex-shrink-0"
-                  :class="chunk.source === 'kb' ? 'bg-violet-100 text-violet-700' :
-                          chunk.source === 'expense' ? 'bg-amber-100 text-amber-700' :
-                          'bg-cyan-100 text-cyan-700'"
-                  x-text="chunk.source === 'kb' ? 'KB' : chunk.source === 'expense' ? 'Решение' : 'Тикет'">
-                </span>
-                <span class="text-xs text-gray-700 truncate flex-1" x-text="chunk.title || '(без заголовка)'"></span>
-                <span class="text-xs font-mono font-semibold flex-shrink-0"
-                  :class="chunk.score > 0.7 ? 'text-emerald-600' : chunk.score > 0.5 ? 'text-yellow-600' : 'text-red-500'"
-                  x-text="(chunk.score * 100).toFixed(0) + '%'">
-                </span>
-              </div>
-              <div x-show="chunk.expanded" x-cloak class="border-t border-gray-100 px-3 py-3">
-                <pre class="text-xs text-gray-600 leading-relaxed" x-text="chunk.text"></pre>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Статистика реальной БД -->
   <div x-show="dbStats" x-cloak class="bg-white rounded-lg border border-gray-200 p-6">
@@ -371,15 +209,15 @@
     </table>
   </div>
 
-  <!-- Пустое состояние -->
-  <div x-show="!result && !loading" class="text-center py-16 text-gray-400">
+  <!-- Пустое состояние (нет данных сессии и нет статистики БД) -->
+  <div x-show="!dbStats && (!stats || stats.total === 0) && allAnalyses.length === 0" class="text-center py-16 text-gray-400">
     <div class="w-12 h-12 border-2 border-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
       <svg class="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
       </svg>
     </div>
-    <p class="text-sm">Задайте вопрос — увидите как работает RAG изнутри</p>
-    <p class="text-xs mt-1 text-gray-300">Поиск по 85 000+ тикетам, 1 680 KB-статьям и 9 864 решениям</p>
+    <p class="text-sm">Данных пока нет</p>
+    <p class="text-xs mt-1 text-gray-300">Статистика появится после первых запросов через Telegram</p>
   </div>
 
 </div>
@@ -392,9 +230,6 @@ const CHART_DEFAULTS = {
 
 function ragInspector() {
   return {
-    query: '',
-    loading: false,
-    result: null,
     apiOk: false,
     allAnalyses: [],
     stats: null,
@@ -402,13 +237,6 @@ function ragInspector() {
     ratingsStats: null,
     weights: {"1":-2,"2":-1,"3":0,"4":1,"5":2},
     charts: {},
-    quickQuestions: [
-      'Не подключается VPN',
-      'Ошибка в 1С при отчёте',
-      'Нет доступа к сетевой папке',
-      'Не работает принтер',
-      'Почта не отправляет письма',
-    ],
 
     async init() {
       try { this.apiOk = (await fetch('/health')).ok; } catch { this.apiOk = false; }
@@ -548,32 +376,11 @@ function ragInspector() {
 
     modelWeightTrendLabel() {
       const delta = this.modelWeightDelta();
-      const avg = this.ratingsStats?.avg_score || 0;
       if (delta > 10) return `📈 Модель уверенно дообучилась: суммарный прирост +${delta.toFixed(0)}%. Источники с высокими оценками получили повышенный приоритет при поиске.`;
       if (delta > 0) return `📈 Положительная динамика (+${delta.toFixed(0)}%). Модель корректирует веса источников в пользу релевантных ответов.`;
       if (delta === 0) return `➡️ Нейтральный баланс. Оценки не изменили приоритеты источников — модель работает в штатном режиме.`;
       if (delta > -10) return `📉 Небольшое снижение (${delta.toFixed(0)}%). Часть источников помечена как ненадёжные, приоритет снижен.`;
       return `📉 Значительное снижение (${delta.toFixed(0)}%). Источники по проблемным темам требуют пересмотра и дополнения базы знаний.`;
-    },
-
-    async submit() {
-      if (!this.query.trim() || this.loading) return;
-      this.loading = true;
-      const q = this.query.trim();
-      try {
-        const data = await (await fetch('/ask', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: q }),
-        })).json();
-        data.chunks = data.chunks.map(c => ({ ...c, expanded: false }));
-        this.result = data;
-        await this.loadAnalysesList();
-      } catch (e) {
-        alert('Ошибка API: ' + e.message);
-      } finally {
-        this.loading = false;
-      }
     },
   }
 }
