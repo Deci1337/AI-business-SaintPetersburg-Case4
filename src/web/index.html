@@ -186,15 +186,7 @@
               <div class="text-xs text-gray-400">вопросов</div>
             </div>
 
-            <!-- Рекомендация -->
-            <div class="flex-shrink-0 hidden md:block">
-              <span class="text-xs px-2 py-1 rounded-md font-medium"
-                    :class="idx < 3 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gray-50 text-gray-500 border border-gray-100'"
-                    x-text="idx < 3 ? '⚠ Нужен тренинг' : 'Мониторинг'">
-              </span>
-            </div>
-
-            <!-- Раскрытие -->
+<!-- Раскрытие -->
             <svg class="w-4 h-4 text-gray-400 flex-shrink-0 transition-transform" :class="cat.expanded ? 'rotate-180' : ''"
                  fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
