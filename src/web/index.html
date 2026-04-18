@@ -57,16 +57,6 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div>
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Топ сервисов по заявкам</div>
-        <canvas id="dbServicesChart"></canvas>
-      </div>
-      <div>
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Динамика по месяцам</div>
-        <canvas id="dbMonthlyChart"></canvas>
-      </div>
-    </div>
   </div>
 
   <!-- Статистика сессии -->
@@ -377,10 +367,6 @@ function ragInspector() {
         const r = await fetch('/db-stats');
         if (!r.ok) return;
         this.dbStats = await r.json();
-        this.$nextTick(() => {
-          this.renderHBarChart('dbServicesChart', this.dbStats.top_services);
-          this.renderLineChart('dbMonthlyChart', this.dbStats.monthly);
-        });
       } catch {}
     },
 
