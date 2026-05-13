@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import json
 import logging
@@ -18,7 +19,7 @@ from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from src.rag.llm import ask_full
-from src.rag.retriever import search
+from src.rag.retriever import warmup
 from src.rag.db import get_connection
 from src.rag.update_index import run_incremental_update, get_last_index_time
 
@@ -41,6 +42,7 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await asyncio.to_thread(warmup)
     scheduler.add_job(
         run_incremental_update,
         CronTrigger(hour=3, minute=0),
@@ -139,6 +141,8 @@ def _top_score(data: dict) -> float:
 
 
 def _confidence_pct(data: dict) -> int:
+    if data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request":
+        return 0
     return max(0, min(99, round(_top_score(data) * 100)))
 
 
@@ -148,7 +152,9 @@ def _risk_flags(data: dict) -> list[str]:
     priority = cl.get("priority", "Средний")
     chunks = data.get("chunks", [])
     confidence = _confidence_pct(data)
-    if data.get("escalated"):
+    if data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request":
+        flags.append("Явный запрос оператора")
+    elif data.get("escalated"):
         flags.append("Нужен оператор")
     if priority in {"Критичный", "Высокий"}:
         flags.append(f"Приоритет: {priority}")
@@ -231,6 +237,7 @@ def _copilot_payload(aid: str, data: dict) -> dict:
     return {
         "analysis_id": aid,
         "confidence_pct": _confidence_pct(data),
+        "explicit_operator_request": bool(data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request"),
         "risk_flags": _risk_flags(data),
         "summary": _first_sentence(data.get("question", "")),
         "probable_cause": _first_sentence(top.get("text") or top.get("title") or data.get("answer", ""), "Недостаточно данных для гипотезы"),
@@ -335,6 +342,7 @@ def _demo_scenarios() -> list[dict]:
                 "service": cl.get("service", "Другое"),
                 "status": "Эскалация" if data.get("escalated") else "Автоответ",
                 "confidence_pct": _confidence_pct(data),
+                "explicit_operator_request": bool(data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request"),
                 "pitch": _first_sentence(data.get("answer", ""), "Откройте кейс, чтобы показать разбор по шагам."),
             })
             used.add(aid)
@@ -348,6 +356,7 @@ def _demo_scenarios() -> list[dict]:
                 "service": data.get("classification", {}).get("service", "Другое"),
                 "status": "Эскалация" if data.get("escalated") else "Автоответ",
                 "confidence_pct": _confidence_pct(data),
+                "explicit_operator_request": bool(data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request"),
                 "pitch": _first_sentence(data.get("answer", ""), "Откройте кейс, чтобы показать разбор по шагам."),
             })
     return selected[:5]
@@ -411,7 +420,7 @@ def ask_endpoint(q: Query, _=Depends(require_api_key)):
             "chunks": [],
         }
 
-    chunks = search(q.question, n_results=6)
+    chunks = result.get("chunks", [])
     search_ms = round((time.time() - t0) * 1000)
     llm_ms = search_ms  # приближение после рефактора
     total_ms = round((time.time() - t0) * 1000)
@@ -422,6 +431,8 @@ def ask_endpoint(q: Query, _=Depends(require_api_key)):
         "escalated": result["escalated"],
         "classification": result["classification"],
         "top_source": result["top_source"],
+        "wants_operator": result.get("wants_operator", False),
+        "escalation_reason": result.get("escalation_reason"),
         "source": q.source,
         "created_at": datetime.now().isoformat(),
         "timing": {
@@ -567,6 +578,7 @@ def operator_feed(limit: int = 5):
             "service": data.get("classification", {}).get("service", "Другое"),
             "priority": data.get("classification", {}).get("priority", "Средний"),
             "confidence_pct": copilot["confidence_pct"],
+            "explicit_operator_request": copilot["explicit_operator_request"],
             "risk_flags": copilot["risk_flags"],
             "summary": copilot["summary"],
             "draft_reply": copilot["draft_reply"],

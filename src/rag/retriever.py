@@ -22,6 +22,11 @@ def get_collections():
     return _kb_col, _ticket_col, _expenses_col
 
 
+def warmup() -> None:
+    get_model()
+    get_collections()
+
+
 def load_adjustments() -> dict[str, float]:
     if not os.path.exists(ADJUSTMENTS_FILE):
         return {}

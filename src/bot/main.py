@@ -294,10 +294,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _clear_history(chat_id)
 
         if wants_operator:
+            if analysis_id:
+                _waiting_operator[chat_id] = analysis_id
             await update.message.reply_text(
-                "👨‍💼 Переключаю на специалиста поддержки.\n\n"
-                "<i>💬 Создаю заявку...</i>",
+                "👨‍💼 Передал запрос специалисту поддержки. Ожидайте ответа.",
                 parse_mode=ParseMode.HTML,
+                reply_markup=_waiting_operator_keyboard(analysis_id) if analysis_id else None,
             )
         else:
             await update.message.reply_text(
@@ -305,7 +307,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "<i>💬 Создаю заявку в поддержку...</i>",
                 parse_mode=ParseMode.HTML,
             )
-        await start_ticket_flow(update, context, query, classification)
+            await start_ticket_flow(update, context, query, classification)
 
     else:
         # Сохраняем пару в историю

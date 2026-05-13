@@ -84,6 +84,8 @@ _OPERATOR_KEYWORDS = [
     "соедините меня", "соедини меня",
     "вызови оператора", "вызовите оператора",
     "хочу к оператору", "хочу к специалисту",
+    "перенаправь меня на оператора", "перенаправьте меня на оператора",
+    "перенаправь на оператора", "перенаправьте на оператора",
 ]
 
 
@@ -313,19 +315,8 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
     history — список dict {"user": str, "assistant": str}, последние N пар.
     Если запрос нерелевантен — возвращает irrelevant=True, статистика не пишется.
     """
-    if not check_relevance(user_query):
-        return {
-            "answer": "",
-            "escalated": False,
-            "irrelevant": True,
-            "classification": {},
-            "top_source": None,
-        }
-
     if check_wants_operator(user_query):
         cl = classify(user_query)
-        if cl["service"] == "Другое":
-            cl["service"] = classify_topic(user_query)
         return {
             "answer": "Понял, переключаю на специалиста поддержки.",
             "escalated": True,
@@ -333,6 +324,18 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
             "wants_operator": True,
             "classification": cl,
             "top_source": None,
+            "chunks": [],
+            "escalation_reason": "explicit_operator_request",
+        }
+
+    if not check_relevance(user_query):
+        return {
+            "answer": "",
+            "escalated": False,
+            "irrelevant": True,
+            "classification": {},
+            "top_source": None,
+            "chunks": [],
         }
 
     search_query = extract_query(user_query)
@@ -353,6 +356,7 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
             "classification": cl,
             "top_source": None,
             "clarify": True,
+            "chunks": [],
         }
 
     if not results or top_score < 0.3:
@@ -365,6 +369,7 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
             "irrelevant": False,
             "classification": cl,
             "top_source": None,
+            "chunks": results,
         }
 
     context = format_context(results)
@@ -397,4 +402,5 @@ def ask_full(user_query: str, history: list[dict] | None = None) -> dict:
         "irrelevant": False,
         "classification": classification,
         "top_source": top_source,
+        "chunks": results,
     }

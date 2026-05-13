@@ -3,8 +3,12 @@
 Запускать один раз: python -m src.rag.indexer
 """
 import re
+import os
 import chromadb
 from bs4 import BeautifulSoup
+
+os.environ.setdefault("USE_TF", "0")
+
 from sentence_transformers import SentenceTransformer
 from .db import fetch_tickets, fetch_kb_articles, fetch_task_expenses
 

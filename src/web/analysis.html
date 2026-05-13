@@ -53,10 +53,10 @@
         <div class="text-sm text-gray-600 mt-1" x-text="riskBannerText()"></div>
       </div>
       <div class="text-right flex-shrink-0">
-        <div class="text-xs text-gray-500">Уверенность</div>
+        <div class="text-xs text-gray-500" x-text="explicitOperatorRequest() ? 'Причина' : 'Уверенность'"></div>
         <div class="text-2xl font-bold font-mono"
           :class="confidencePct() >= 70 ? 'text-emerald-600' : confidencePct() >= 50 ? 'text-yellow-600' : 'text-orange-600'"
-          x-text="confidencePct() + '%'"></div>
+          x-text="explicitOperatorRequest() ? 'operator' : confidencePct() + '%'"></div>
       </div>
     </div>
     <div class="flex flex-wrap gap-2 mt-3" x-show="copilot?.risk_flags?.length">
@@ -284,7 +284,7 @@
           <div class="w-px flex-1 bg-gray-100 my-1"></div>
         </div>
         <div class="pb-5 flex-1">
-          <div class="text-sm font-semibold text-gray-800 mb-1">Уверенность модели</div>
+          <div class="text-sm font-semibold text-gray-800 mb-1" x-text="explicitOperatorRequest() ? 'Причина эскалации' : 'Уверенность модели'"></div>
           <div class="text-sm text-gray-600 leading-relaxed mb-3" x-html="confidenceText()"></div>
           <div class="flex items-center gap-3">
             <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -452,11 +452,19 @@ function analysisPage() {
     },
 
     confidencePct() {
+      if (this.explicitOperatorRequest()) return 0;
       return Math.round(this.topScore() * 100);
+    },
+
+    explicitOperatorRequest() {
+      return Boolean(this.data?.wants_operator || this.data?.escalation_reason === 'explicit_operator_request' || this.copilot?.explicit_operator_request);
     },
 
     riskBannerText() {
       if (!this.data) return '';
+      if (this.explicitOperatorRequest()) {
+        return 'Кейс ушёл к оператору потому, что сотрудник явно попросил живую поддержку. Уверенность модели здесь не используется как критерий решения.';
+      }
       if (this.data.escalated) {
         return `Кейс ушёл к оператору: уверенность ${this.confidencePct()}%, приоритет ${this.data?.classification?.priority || 'Средний'}. Ниже уже есть готовый черновик ответа и похожие случаи.`;
       }
@@ -476,6 +484,7 @@ function analysisPage() {
     },
 
     confidenceText() {
+      if (this.explicitOperatorRequest()) return 'Эскалация выполнена по <strong class="text-orange-600">явному запросу сотрудника</strong>. Система не пыталась закрыть обращение автоматически.';
       const pct = this.confidencePct();
       if (pct === 0) return 'Уверенность: <strong class="text-red-600">0%</strong> — контекст отсутствует. Модель не имела данных для ответа.';
       if (pct >= 70) return `Уверенность: <strong class="text-emerald-600">${pct}%</strong> — высокое совпадение. Ответ основан на реальных данных из базы знаний компании.`;
@@ -491,6 +500,9 @@ function analysisPage() {
     },
 
     decisionText() {
+      if (this.explicitOperatorRequest()) {
+        return 'Запрос <strong class="text-orange-600">сразу передан оператору</strong>, потому что сотрудник явно попросил живую поддержку. Это не ошибка уверенности, а бизнес-правило маршрутизации.';
+      }
       const pct = this.confidencePct();
       const chunks = this.data?.chunks || [];
       if (this.data?.escalated && chunks.length === 0) {
