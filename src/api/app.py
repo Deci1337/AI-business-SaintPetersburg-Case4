@@ -42,7 +42,7 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await asyncio.to_thread(warmup)
+    asyncio.create_task(asyncio.to_thread(warmup))
     scheduler.add_job(
         run_incremental_update,
         CronTrigger(hour=3, minute=0),
