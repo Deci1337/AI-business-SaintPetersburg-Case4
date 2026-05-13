@@ -72,6 +72,9 @@ analyses: OrderedDict = OrderedDict()
 MAX_ANALYSES = 1000
 QUESTIONS_LOG = "data/questions_log.jsonl"
 ANALYSES_LOG = "data/analyses.jsonl"
+RATINGS_FILE = "data/ratings.csv"
+WEIGHTS_FILE = "data/weights.json"
+DEFAULT_WEIGHTS = {"1": -2, "2": -1, "3": 0, "4": 1, "5": 2}
 
 
 def _append_question_log(entry: dict) -> None:
@@ -126,6 +129,228 @@ def save_analysis(data: dict, aid: str | None = None, persist: bool = True) -> s
 
 
 _load_analyses()
+
+
+def _top_score(data: dict) -> float:
+    chunks = data.get("chunks", [])
+    if not chunks:
+        return 0.0
+    return max(float(ch.get("score", 0.0)) for ch in chunks)
+
+
+def _confidence_pct(data: dict) -> int:
+    return max(0, min(99, round(_top_score(data) * 100)))
+
+
+def _risk_flags(data: dict) -> list[str]:
+    flags = []
+    cl = data.get("classification", {})
+    priority = cl.get("priority", "Средний")
+    chunks = data.get("chunks", [])
+    confidence = _confidence_pct(data)
+    if data.get("escalated"):
+        flags.append("Нужен оператор")
+    if priority in {"Критичный", "Высокий"}:
+        flags.append(f"Приоритет: {priority}")
+    if not chunks:
+        flags.append("В базе нет похожих кейсов")
+    elif confidence < 55:
+        flags.append(f"Низкая уверенность: {confidence}%")
+    elif len(chunks) < 2:
+        flags.append("Мало подтверждающих источников")
+    return flags or ["Риск низкий"]
+
+
+def _first_sentence(text: str, fallback: str = "Нет данных") -> str:
+    text = " ".join((text or "").split())
+    if not text:
+        return fallback
+    for sep in ".!?":
+        if sep in text:
+            return text.split(sep, 1)[0].strip()[:220]
+    return text[:220]
+
+
+def _next_actions(data: dict) -> list[str]:
+    cl = data.get("classification", {})
+    service = cl.get("service", "Другое")
+    task_type = cl.get("task_type", "Инцидент")
+    priority = cl.get("priority", "Средний")
+    actions = []
+    if data.get("escalated"):
+        actions.append("Проверить у сотрудника влияние на работу и подтвердить симптомы.")
+    if service == "Сеть и VPN":
+        actions.append("Сверить сетевой контур: VPN, интернет, учётные данные, срок действия доступа.")
+    elif service == "1С и ERP":
+        actions.append("Проверить права, роль пользователя и наличие типовых ошибок в 1С/ERP.")
+    elif service == "Доступ и права":
+        actions.append("Проверить учётную запись, блокировки и членство в группах доступа.")
+    elif service == "Оргтехника":
+        actions.append("Проверить физическое подключение, очередь печати и состояние драйвера.")
+    else:
+        actions.append("Подтвердить шаг воспроизведения и среду: устройство, приложение, время ошибки.")
+    if task_type == "Запрос":
+        actions.append("Проверить, нужен ли стандартный request workflow вместо инцидента.")
+    if priority in {"Критичный", "Высокий"}:
+        actions.append("Обновлять сотрудника каждые 10–15 минут до снятия блокера.")
+    return actions[:3]
+
+
+def _similar_cases(data: dict) -> list[dict]:
+    cases = []
+    for chunk in data.get("chunks", []):
+        if chunk.get("source") not in {"ticket", "expense"}:
+            continue
+        cases.append({
+            "title": chunk.get("title") or "Без названия",
+            "source": "Тикет" if chunk.get("source") == "ticket" else "Решение",
+            "score_pct": round(float(chunk.get("score", 0.0)) * 100),
+            "text": (chunk.get("text") or "").strip()[:180],
+        })
+    return cases[:3]
+
+
+def _build_draft_reply(data: dict) -> str:
+    answer = (data.get("answer") or "").strip()
+    if answer and not data.get("escalated"):
+        return answer
+    summary = _first_sentence(data.get("question", ""), "Нужна проверка обращения")
+    actions = _next_actions(data)
+    lines = [f"Принял запрос: {summary}."]
+    if actions:
+        lines.append(f"Сейчас проверю: {actions[0].rstrip('.')}.")
+    if len(actions) > 1:
+        lines.append(f"Дальше: {actions[1].rstrip('.')}.")
+    lines.append("Вернусь с обновлением после первичной диагностики.")
+    return "\n".join(lines)
+
+
+def _copilot_payload(aid: str, data: dict) -> dict:
+    chunks = data.get("chunks", [])
+    top = chunks[0] if chunks else {}
+    return {
+        "analysis_id": aid,
+        "confidence_pct": _confidence_pct(data),
+        "risk_flags": _risk_flags(data),
+        "summary": _first_sentence(data.get("question", "")),
+        "probable_cause": _first_sentence(top.get("text") or top.get("title") or data.get("answer", ""), "Недостаточно данных для гипотезы"),
+        "draft_reply": _build_draft_reply(data),
+        "next_actions": _next_actions(data),
+        "similar_cases": _similar_cases(data),
+    }
+
+
+def _load_weights_map() -> dict[str, float]:
+    if not os.path.exists(WEIGHTS_FILE):
+        return dict(DEFAULT_WEIGHTS)
+    try:
+        with open(WEIGHTS_FILE, encoding="utf-8") as f:
+            raw = json.load(f)
+        return {str(k): float(v) for k, v in raw.items()}
+    except Exception:
+        return dict(DEFAULT_WEIGHTS)
+
+
+def _save_weights_map(weights: dict[str, float]) -> dict[str, float]:
+    normalized = {str(k): float(v) for k, v in weights.items() if str(k) in {"1", "2", "3", "4", "5"}}
+    merged = dict(DEFAULT_WEIGHTS)
+    merged.update(normalized)
+    os.makedirs("data", exist_ok=True)
+    tmp = WEIGHTS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(merged, f, ensure_ascii=False)
+    os.replace(tmp, WEIGHTS_FILE)
+    return merged
+
+
+def _ratings_for_analysis(aid: str) -> list[int]:
+    if not os.path.exists(RATINGS_FILE):
+        return []
+    scores = []
+    with open(RATINGS_FILE, encoding="utf-8") as f:
+        for row in csv.reader(f):
+            if len(row) < 3 or row[1] != aid:
+                continue
+            try:
+                scores.append(int(row[2]))
+            except ValueError:
+                pass
+    return scores
+
+
+def _learning_preview(aid: str, data: dict) -> dict:
+    weights = _load_weights_map()
+    ratings = _ratings_for_analysis(aid)
+    chunks = []
+    for chunk in data.get("chunks", [])[:3]:
+        base = round(float(chunk.get("base_score", chunk.get("score", 0.0))), 3)
+        boost = round(float(chunk.get("boost", 0.0)), 3)
+        current = round(float(chunk.get("score", 0.0)), 3)
+        chunks.append({
+            "title": chunk.get("title") or "Без названия",
+            "source": chunk.get("source", ""),
+            "base_score": base,
+            "boost": boost,
+            "current_score": current,
+            "impact": "усилен" if boost > 0 else "ослаблен" if boost < 0 else "без изменений",
+        })
+    last_score = ratings[-1] if ratings else None
+    return {
+        "analysis_id": aid,
+        "ratings_count": len(ratings),
+        "last_score": last_score,
+        "weights": weights,
+        "chunks": chunks,
+        "summary": (
+            f"Последняя оценка: {last_score}/5. "
+            f"Сейчас модель смещает приоритет источников по шкале {weights}."
+            if last_score
+            else "Для этого кейса оценок ещё нет. После оценки система изменит приоритет похожих фрагментов."
+        ),
+    }
+
+
+def _demo_scenarios() -> list[dict]:
+    items = list(reversed(list(analyses.items())))
+    if not items:
+        return []
+    buckets = [
+        ("Автоответ с высокой уверенностью", lambda d: not d.get("escalated") and _confidence_pct(d) >= 75),
+        ("Эскалация в live-режиме", lambda d: d.get("escalated")),
+        ("Пустой контекст", lambda d: not d.get("chunks")),
+        ("История из тикета", lambda d: d.get("source") == "ticket"),
+        ("Обучение на обратной связи", lambda d: any(abs(float(ch.get("boost", 0.0))) > 0 for ch in d.get("chunks", []))),
+    ]
+    selected = []
+    used = set()
+    for title, matcher in buckets:
+        for aid, data in items:
+            if aid in used or not matcher(data):
+                continue
+            cl = data.get("classification", {})
+            selected.append({
+                "id": aid,
+                "title": title,
+                "question": data.get("question", "")[:120],
+                "service": cl.get("service", "Другое"),
+                "status": "Эскалация" if data.get("escalated") else "Автоответ",
+                "confidence_pct": _confidence_pct(data),
+                "pitch": _first_sentence(data.get("answer", ""), "Откройте кейс, чтобы показать разбор по шагам."),
+            })
+            used.add(aid)
+            break
+    if not selected:
+        for aid, data in items[:5]:
+            selected.append({
+                "id": aid,
+                "title": "Свежий кейс",
+                "question": data.get("question", "")[:120],
+                "service": data.get("classification", {}).get("service", "Другое"),
+                "status": "Эскалация" if data.get("escalated") else "Автоответ",
+                "confidence_pct": _confidence_pct(data),
+                "pitch": _first_sentence(data.get("answer", ""), "Откройте кейс, чтобы показать разбор по шагам."),
+            })
+    return selected[:5]
 
 
 class DialogTurn(BaseModel):
@@ -285,6 +510,10 @@ class RegisteredAnalysis(BaseModel):
     created_at: str | None = None
 
 
+class WeightsUpdate(BaseModel):
+    weights: dict[str, float]
+
+
 @app.post("/analyses/register", dependencies=[Depends(require_api_key)])
 def register_analysis(a: RegisteredAnalysis):
     data = {
@@ -307,6 +536,49 @@ def get_analysis(aid: str):
     if aid not in analyses:
         raise HTTPException(404, "Анализ не найден")
     return analyses[aid]
+
+
+@app.get("/analyses/{aid}/copilot")
+def analysis_copilot(aid: str):
+    data = analyses.get(aid)
+    if not data:
+        raise HTTPException(404, "Анализ не найден")
+    return _copilot_payload(aid, data)
+
+
+@app.get("/analyses/{aid}/learning-preview")
+def analysis_learning_preview(aid: str):
+    data = analyses.get(aid)
+    if not data:
+        raise HTTPException(404, "Анализ не найден")
+    return _learning_preview(aid, data)
+
+
+@app.get("/operator-feed")
+def operator_feed(limit: int = 5):
+    items = []
+    for aid, data in reversed(list(analyses.items())):
+        if not data.get("escalated"):
+            continue
+        copilot = _copilot_payload(aid, data)
+        items.append({
+            "id": aid,
+            "question": data.get("question", "")[:120],
+            "service": data.get("classification", {}).get("service", "Другое"),
+            "priority": data.get("classification", {}).get("priority", "Средний"),
+            "confidence_pct": copilot["confidence_pct"],
+            "risk_flags": copilot["risk_flags"],
+            "summary": copilot["summary"],
+            "draft_reply": copilot["draft_reply"],
+        })
+        if len(items) >= limit:
+            break
+    return {"items": items}
+
+
+@app.get("/demo/scenarios")
+def demo_scenarios():
+    return {"items": _demo_scenarios()}
 
 
 @app.get("/stats/weekly")
@@ -531,7 +803,7 @@ def save_rating(r: Rating):
     if not 1 <= r.score <= 5:
         raise HTTPException(400, "score must be 1-5")
     os.makedirs("data", exist_ok=True)
-    with open("data/ratings.csv", "a", newline="", encoding="utf-8") as f:
+    with open(RATINGS_FILE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([
             datetime.now().isoformat(), r.analysis_id, r.score,
             r.question[:200], r.answer[:200],
@@ -540,8 +812,8 @@ def save_rating(r: Rating):
     # Применяем обучение: корректируем веса чанков, участвовавших в ответе
     try:
         from src.rag.retriever import apply_feedback
-        weights = {1: -0.05, 2: -0.025, 3: 0.0, 4: 0.025, 5: 0.05}
-        delta = weights.get(r.score, 0.0)
+        raw_weights = _load_weights_map()
+        delta = float(raw_weights.get(str(r.score), 0.0)) / 100.0
         analysis = analyses.get(r.analysis_id)
         if analysis and delta != 0:
             # Берём топ-3 чанка (они сильнее всего повлияли на ответ)
@@ -570,19 +842,18 @@ def chunk_adjustments():
 
 @app.get("/weights")
 def get_weights():
-    path = "data/weights.json"
-    defaults = {"1": -2, "2": -1, "3": 0, "4": 1, "5": 2}
-    if not os.path.exists(path):
-        return defaults
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    return _load_weights_map()
+
+
+@app.put("/weights", dependencies=[Depends(require_api_key)])
+def update_weights(body: WeightsUpdate):
+    return _save_weights_map(body.weights)
 
 
 @app.get("/ratings/timeline")
 def ratings_timeline(period: str = "day"):
     """Динамика оценок: всего оценено и положительно (4-5★) по периодам (hour/day/week)."""
-    path = "data/ratings.csv"
-    if not os.path.exists(path):
+    if not os.path.exists(RATINGS_FILE):
         return {"labels": [], "total": [], "positive": []}
 
     fmt_map = {"hour": "%Y-%m-%d %H:00", "day": "%Y-%m-%d", "week": "%Y-W%W"}
@@ -592,7 +863,7 @@ def ratings_timeline(period: str = "day"):
     buckets_total = defaultdict(int)
     buckets_pos = defaultdict(int)
 
-    with open(path, encoding="utf-8") as f:
+    with open(RATINGS_FILE, encoding="utf-8") as f:
         for row in csv.reader(f):
             if len(row) < 3:
                 continue
@@ -616,11 +887,10 @@ def ratings_timeline(period: str = "day"):
 
 @app.get("/ratings/stats")
 def ratings_stats():
-    path = "data/ratings.csv"
-    if not os.path.exists(path):
+    if not os.path.exists(RATINGS_FILE):
         return {"total": 0, "avg_score": None, "distribution": {}}
     rows = []
-    with open(path, encoding="utf-8") as f:
+    with open(RATINGS_FILE, encoding="utf-8") as f:
         for row in csv.reader(f):
             if len(row) >= 3:
                 try:

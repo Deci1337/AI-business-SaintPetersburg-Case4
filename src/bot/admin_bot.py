@@ -1,9 +1,9 @@
 import asyncio
-import csv
 import json
 import logging
 import os
 from datetime import datetime
+import httpx
 
 from dotenv import load_dotenv
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO)
 ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN")
 SUPER_ADMIN_ID = int(os.getenv("SUPER_ADMIN_ID", "0"))
 MAIN_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-RATINGS_FILE = "data/ratings.csv"
+API_BASE = os.getenv("API_BASE_URL", "http://localhost:8001")
+API_KEY = os.getenv("API_KEY")
 ADMINS_FILE = "data/admins.json"
 WEIGHTS_FILE = "data/weights.json"
 ESCALATIONS_FILE = "data/escalations.json"
@@ -97,6 +98,13 @@ _app = None
 # --- Weights management ---
 
 def _load_weights() -> dict:
+    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
+    try:
+        r = httpx.get(f"{API_BASE}/weights", headers=headers, timeout=10)
+        if r.is_success:
+            return {int(k): v for k, v in r.json().items()}
+    except Exception:
+        pass
     if not os.path.exists(WEIGHTS_FILE):
         return dict(DEFAULT_WEIGHTS)
     with open(WEIGHTS_FILE, encoding="utf-8") as f:
@@ -105,6 +113,18 @@ def _load_weights() -> dict:
 
 
 def _save_weights(weights: dict) -> None:
+    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
+    try:
+        r = httpx.put(
+            f"{API_BASE}/weights",
+            json={"weights": {str(k): v for k, v in weights.items()}},
+            headers=headers,
+            timeout=10,
+        )
+        r.raise_for_status()
+        return
+    except Exception:
+        pass
     os.makedirs("data", exist_ok=True)
     with open(WEIGHTS_FILE, "w", encoding="utf-8") as f:
         json.dump({str(k): v for k, v in weights.items()}, f)

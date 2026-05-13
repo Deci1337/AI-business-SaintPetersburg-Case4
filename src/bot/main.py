@@ -1,5 +1,4 @@
 import asyncio
-import csv
 import html
 import os
 import logging
@@ -18,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8001")
 API_KEY = os.getenv("API_KEY")
-RATINGS_FILE = "data/ratings.csv"
 
 HISTORY_MAX_TURNS = 3
 HISTORY_TTL_MINUTES = 30
@@ -64,13 +62,19 @@ def _get_last_aid(chat_id: int) -> str | None:
     return _dialog_history.get(chat_id, {}).get("last_aid")
 
 
-def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> None:
-    os.makedirs("data", exist_ok=True)
-    with open(RATINGS_FILE, "a", newline="", encoding="utf-8") as f:
-        csv.writer(f).writerow([
-            datetime.now().isoformat(), analysis_id, score,
-            question[:200], answer[:200],
-        ])
+async def _save_rating(analysis_id: str, score: int, question: str, answer: str) -> None:
+    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
+    async with httpx.AsyncClient(timeout=15) as client:
+        await client.post(
+            f"{API_BASE}/ratings",
+            json={
+                "analysis_id": analysis_id,
+                "score": score,
+                "question": question[:200],
+                "answer": answer[:200],
+            },
+            headers=headers,
+        )
 
 
 def _rating_keyboard(aid: str) -> InlineKeyboardMarkup:
@@ -403,7 +407,10 @@ async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         _, aid, score_str = parts
         score = int(score_str)
         p = _pending_ratings.get(aid, {})
-        _save_rating(aid, score, p.get("question", ""), p.get("answer", ""))
+        try:
+            await _save_rating(aid, score, p.get("question", ""), p.get("answer", ""))
+        except Exception as e:
+            logging.warning(f"save rating failed: {e}")
         _pending_ratings.pop(aid, None)
 
         thanks = {
