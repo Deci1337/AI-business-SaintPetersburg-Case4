@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from src.rag.llm import ask_full
+from src.rag.llm import ask_full, check_wants_operator
 from src.rag.retriever import warmup
 from src.rag.db import get_connection
 from src.rag.update_index import run_incremental_update, get_last_index_time
@@ -140,8 +140,12 @@ def _top_score(data: dict) -> float:
     return max(float(ch.get("score", 0.0)) for ch in chunks)
 
 
+def _explicit_operator_request(data: dict) -> bool:
+    return bool(data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request" or check_wants_operator(data.get("question", "")))
+
+
 def _confidence_pct(data: dict) -> int:
-    if data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request":
+    if _explicit_operator_request(data):
         return 0
     return max(0, min(99, round(_top_score(data) * 100)))
 
@@ -152,7 +156,7 @@ def _risk_flags(data: dict) -> list[str]:
     priority = cl.get("priority", "Средний")
     chunks = data.get("chunks", [])
     confidence = _confidence_pct(data)
-    if data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request":
+    if _explicit_operator_request(data):
         flags.append("Явный запрос оператора")
     elif data.get("escalated"):
         flags.append("Нужен оператор")
@@ -237,7 +241,7 @@ def _copilot_payload(aid: str, data: dict) -> dict:
     return {
         "analysis_id": aid,
         "confidence_pct": _confidence_pct(data),
-        "explicit_operator_request": bool(data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request"),
+        "explicit_operator_request": _explicit_operator_request(data),
         "risk_flags": _risk_flags(data),
         "summary": _first_sentence(data.get("question", "")),
         "probable_cause": _first_sentence(top.get("text") or top.get("title") or data.get("answer", ""), "Недостаточно данных для гипотезы"),
@@ -342,7 +346,7 @@ def _demo_scenarios() -> list[dict]:
                 "service": cl.get("service", "Другое"),
                 "status": "Эскалация" if data.get("escalated") else "Автоответ",
                 "confidence_pct": _confidence_pct(data),
-                "explicit_operator_request": bool(data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request"),
+                "explicit_operator_request": _explicit_operator_request(data),
                 "pitch": _first_sentence(data.get("answer", ""), "Откройте кейс, чтобы показать разбор по шагам."),
             })
             used.add(aid)
@@ -356,7 +360,7 @@ def _demo_scenarios() -> list[dict]:
                 "service": data.get("classification", {}).get("service", "Другое"),
                 "status": "Эскалация" if data.get("escalated") else "Автоответ",
                 "confidence_pct": _confidence_pct(data),
-                "explicit_operator_request": bool(data.get("wants_operator") or data.get("escalation_reason") == "explicit_operator_request"),
+                "explicit_operator_request": _explicit_operator_request(data),
                 "pitch": _first_sentence(data.get("answer", ""), "Откройте кейс, чтобы показать разбор по шагам."),
             })
     return selected[:5]
