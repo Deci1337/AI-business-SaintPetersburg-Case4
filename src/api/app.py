@@ -71,6 +71,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 analyses: OrderedDict = OrderedDict()
 MAX_ANALYSES = 1000
 QUESTIONS_LOG = "data/questions_log.jsonl"
+ANALYSES_LOG = "data/analyses.jsonl"
 
 
 def _append_question_log(entry: dict) -> None:
@@ -93,12 +94,38 @@ def _normalize_question(q: str) -> str:
     return " ".join(words[:8])  # первые 8 значимых слов — ключ группировки
 
 
-def save_analysis(data: dict) -> str:
-    aid = str(uuid.uuid4())
+def _persist_analysis(aid: str, data: dict) -> None:
+    os.makedirs("data", exist_ok=True)
+    with open(ANALYSES_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"id": aid, "data": data}, ensure_ascii=False) + "\n")
+
+
+def _load_analyses() -> None:
+    if not os.path.exists(ANALYSES_LOG):
+        return
+    with open(ANALYSES_LOG, encoding="utf-8") as f:
+        for line in f:
+            try:
+                item = json.loads(line)
+                aid = item["id"]
+                analyses[aid] = item["data"]
+                if len(analyses) > MAX_ANALYSES:
+                    analyses.popitem(last=False)
+            except Exception:
+                pass
+
+
+def save_analysis(data: dict, aid: str | None = None, persist: bool = True) -> str:
+    aid = aid or str(uuid.uuid4())
     if len(analyses) >= MAX_ANALYSES:
         analyses.popitem(last=False)
     analyses[aid] = data
+    if persist:
+        _persist_analysis(aid, data)
     return aid
+
+
+_load_analyses()
 
 
 class DialogTurn(BaseModel):
@@ -244,6 +271,35 @@ def list_analyses():
         }
         for aid, d in reversed(list(analyses.items()))
     ]
+
+
+class RegisteredAnalysis(BaseModel):
+    id: str
+    question: str
+    answer: str
+    escalated: bool = True
+    classification: dict = {}
+    top_source: dict | None = None
+    source: str = "ticket"
+    chunks: list[dict] = []
+    created_at: str | None = None
+
+
+@app.post("/analyses/register", dependencies=[Depends(require_api_key)])
+def register_analysis(a: RegisteredAnalysis):
+    data = {
+        "question": a.question,
+        "answer": a.answer,
+        "escalated": a.escalated,
+        "classification": a.classification,
+        "top_source": a.top_source,
+        "source": a.source,
+        "created_at": a.created_at or datetime.now().isoformat(),
+        "timing": {"search_ms": 0, "llm_ms": 0, "total_ms": 0},
+        "chunks": a.chunks,
+    }
+    save_analysis(data, aid=a.id)
+    return {"ok": True, "id": a.id}
 
 
 @app.get("/analyses/{aid}")

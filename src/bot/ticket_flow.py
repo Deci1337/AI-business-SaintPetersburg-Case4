@@ -76,6 +76,38 @@ async def _make_subject(question: str, clarification: str) -> str:
         return combined[:80]
 
 
+async def _register_ticket_analysis(record: dict) -> None:
+    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
+    answer = (
+        f"Сервис: {record['service']}\n"
+        f"Тип: {record['task_type']}\n"
+        f"Приоритет: {record['priority']}\n\n"
+        f"{record['description']}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{API_BASE}/analyses/register",
+                json={
+                    "id": record["id"],
+                    "question": f"[ЗАЯВКА #{record['id']}] {record['subject']}",
+                    "answer": answer,
+                    "escalated": True,
+                    "classification": {
+                        "service": record["service"],
+                        "task_type": record["task_type"],
+                        "priority": record["priority"],
+                    },
+                    "source": "ticket",
+                    "created_at": record["created_at"],
+                    "chunks": [],
+                },
+                headers=headers,
+            )
+    except Exception as e:
+        log.warning(f"_register_ticket_analysis failed: {e}")
+
+
 def _priority_emoji(priority: str) -> str:
     return {"Критичный": "🔴", "Высокий": "🟠", "Средний": "🟡", "Низкий": "🟢"}.get(priority, "⚪")
 
@@ -184,6 +216,7 @@ async def handle_ticket_callback(update: Update, context: ContextTypes.DEFAULT_T
             "description": full_desc[:500],
         }
         _save_ticket(record)
+        await _register_ticket_analysis(record)
 
         try:
             from src.bot.admin_bot import notify_admins

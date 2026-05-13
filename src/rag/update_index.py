@@ -85,7 +85,7 @@ def run_incremental_update() -> dict:
                     STRING_AGG(CAST(tc.Text AS NVARCHAR(MAX)), ' | ') AS Comment
                 FROM Task t
                 LEFT JOIN Service s ON t.ServiceId = s.Id
-                LEFT JOIN TaskType tt ON t.TaskTypeId = tt.Id
+                LEFT JOIN TaskType tt ON t.TypeId = tt.Id
                 LEFT JOIN Status st ON t.StatusId = st.Id
                 LEFT JOIN Priority p ON t.PriorityId = p.Id
                 LEFT JOIN TaskComment tc ON t.Id = tc.TaskId AND LEN(ISNULL(tc.Text, '')) > 50
